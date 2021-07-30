@@ -352,6 +352,8 @@ Resources:
         HeadNodeInstanceType: !Ref 'HeadNodeInstanceType'
         HeadNodeNetBIOSName: !Ref 'HeadNodeNetBIOSName'
         RemoteAccessCIDR: !Ref 'RemoteAccessCIDR'
+        CertS3Bucket: !Ref 'CertS3Bucket'
+        CertS3Key: !Ref 'CertS3Key'
   WorkerStack:
     Type: AWS::CloudFormation::Stack
     Properties:

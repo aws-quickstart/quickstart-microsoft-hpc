@@ -43,12 +43,21 @@ Metadata:
           - JumpServerNetBIOSName
           - JumpServerAMI
       - Label:
+          default: Certificate Configuration
+        Parameters:
+          - CertS3Bucket
+          - CertS3Key
+      - Label:
           default: AWS Quick Start Configuration
         Parameters:
           - QSS3BucketName
           - QSS3BucketRegion
           - QSS3KeyPrefix
     ParameterLabels:
+      CertS3Bucket:
+        default: Certificate S3 bucket
+      CertS3Key:
+        default: Certificate S3 key
       HeadNodeInstanceType:
         default: Head node instance type
       HeadNodeNetBIOSName:
@@ -96,6 +105,13 @@ Metadata:
       ThroughputCapacity:
         default: ThroughputCapacity
 Parameters:
+  CertS3Bucket:
+    AllowedPattern: '^[0-9a-zA-Z]+([0-9a-zA-Z-]*[0-9a-zA-Z])*$'
+    Description: S3 bucket containing the certificate
+    Type: String
+  CertS3Key:
+    Description: S3 key for the certificate
+    Type: String
   RemoteAccessCIDR:
     Description: Remote access CIDR
     Default: "0.0.0.0/0"
@@ -587,8 +603,10 @@ Resources:
                   - !Ref 'DomainAdminUser'
                   - ''' -DomainAdminPassword '''
                   - !Ref 'DomainAdminPassword'
-                  - ''' -QSS3BucketName '''
-                  - !Ref 'QSS3BucketName'
+                  - ''' -CertS3Bucket '''
+                  - !Ref 'CertS3Bucket'
+                  - ''' -CertS3Key '''
+                  - !Ref 'CertS3Key'
                   - '''"'
               waitAfterCompletion: '0'
             g-configure-network:
@@ -768,8 +786,10 @@ Resources:
                 - - powershell.exe -ExecutionPolicy RemoteSigned -Command "C:\cfn\scripts\ConfigJumpBox.ps1  -DomainAdminPassword
                     '
                   - !Ref 'DomainAdminPassword'
-                  - ''' -QSS3BucketName '''
-                  - !Ref 'QSS3BucketName'
+                  - ''' -CertS3Bucket '''
+                  - !Ref 'CertS3Bucket'
+                  - ''' -CertS3Key '''
+                  - !Ref 'CertS3Key'
                   - '''"'
               waitAfterCompletion: '0'
         Cleanup:

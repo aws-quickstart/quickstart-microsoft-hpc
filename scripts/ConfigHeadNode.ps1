@@ -10,12 +10,18 @@ param(
     [Parameter(Mandatory=$true)]
     [string]
     $DomainAdminUser,
+
     [Parameter(Mandatory=$true)]
     [string]
     $DomainAdminPassword,
+
     [Parameter(Mandatory=$true)]
     [string]
-    $QSS3BucketName
+    $CertS3Bucket,
+
+    [Parameter(Mandatory=$true)]
+    [string]
+    $CertS3Key
 
 )
 Start-Transcript -Path C:\cfn\log\ConfigHeadNode.ps1.txt -Append
@@ -38,8 +44,9 @@ Invoke-Sqlcmd -ServerInstance $ServerInstance -Query $q3
 
 #Download the certs
 $cerFileName = "C:\ms-hpcpack2019\myhpc.pfx"
-$bucket = "${QSS3BucketName}"
-Copy-S3Object -BucketName $bucket -Key mypfx.pfx -LocalFile $cerFileName
+$bucket = "${CertS3Bucket}"
+$key = "${CertS3Key}"
+Copy-S3Object -BucketName $bucket -Key $key -LocalFile $cerFileName
 $pw = "${DomainAdminPassword}"
 
 ##Setupdatabase
