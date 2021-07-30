@@ -1,0 +1,823 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Deploys Head Node '
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Network Configuration
+        Parameters:
+          - VPCID
+          - PrivateSubnet1ID
+          - PrivateSubnet2ID
+          - PublicSubnet1ID
+          - PublicSubnet2ID
+          - KeyPairName
+      - Label:
+          default: FSX Storage Configuration
+        Parameters:
+          - FileSystemName
+          - StorageCapacity
+          - ThroughputCapacity
+      - Label:
+          default: Microsoft Active Directory Configuration
+        Parameters:
+          - DomainDNSName
+          - DomainNetBIOSName
+          - ADServer1PrivateIP
+          - ADServer2PrivateIP
+          - DomainAdminUser
+          - DomainAdminPassword
+          - DomainMemberSGID
+      - Label:
+          default: Head Node Configuration
+        Parameters:
+          - HeadNodeNetBIOSName
+          - HeadNodeInstanceType
+          - HeadNodeAMI
+          - HeadNodeSGID
+      - Label:
+          default: AWS Quick Start Configuration
+        Parameters:
+          - QSS3BucketName
+          - QSS3BucketRegion
+          - QSS3KeyPrefix
+    ParameterLabels:
+      DomainAdminPassword:
+        default: Domain Admin Password
+      DomainAdminUser:
+        default: Domain Admin User Name
+      DomainDNSName:
+        default: Domain DNS Name
+      DomainMemberSGID:
+        default: Security Group ID for AD Domain Members
+      DomainNetBIOSName:
+        default: Domain NetBIOS Name
+      KeyPairName:
+        default: Key Pair Name
+      PrivateSubnet1ID:
+        default: Private Subnet 1 ID
+      PrivateSubnet2ID:
+        default: Private Subnet 2 ID
+      PublicSubnet1ID:
+        default: Public Subnet 1 ID
+      PublicSubnet2ID:
+        default: Public Subnet 2 ID
+      ADServer1PrivateIP:
+        default: DNS Server IP
+      ADServer2PrivateIP:
+        default: DNS Server IP
+      QSS3BucketName:
+        default: Quick Start S3 Bucket Name
+      QSS3BucketRegion:
+        default: Quick Start S3 bucket Region
+      QSS3KeyPrefix:
+        default: Quick Start S3 Key Prefix
+      VPCID:
+        default: VPC ID
+      FileSystemName:
+        default: FileSystemName
+      StorageCapacity:
+        default: StorageCapacity
+      ThroughputCapacity:
+        default: ThroughputCapacity
+Parameters:
+  DomainAdminPassword:
+    AllowedPattern: (?=^.{6,255}$)((?=.*\d)(?=.*[A-Z])(?=.*[a-z])|(?=.*\d)(?=.*[^A-Za-z0-9])(?=.*[a-z])|(?=.*[^A-Za-z0-9])(?=.*[A-Z])(?=.*[a-z])|(?=.*\d)(?=.*[A-Z])(?=.*[^A-Za-z0-9]))^.*
+    Description: Password for the domain admin user. Must be at least 8 characters
+      containing letters, numbers and symbols
+    MaxLength: '32'
+    MinLength: '8'
+    NoEcho: 'true'
+    Type: String
+  DomainAdminUser:
+    Default: admin
+    Description: User name for the account that will be used as Domain Administrator.
+      This is separate from the default "Administrator" account
+    MaxLength: '25'
+    MinLength: '5'
+    Type: String
+  DomainDNSName:
+    AllowedPattern: '[a-zA-Z0-9\-]+\..+'
+    Default: example.com
+    Description: Fully qualified domain name (FQDN) e.g. example.com
+    MaxLength: '255'
+    MinLength: '2'
+    Type: String
+  DomainMemberSGID:
+    Description: ID of the Domain Member Security Group (e.g., sg-7f16e910)
+    Type: AWS::EC2::SecurityGroup::Id
+  DomainNetBIOSName:
+    AllowedPattern: '[a-zA-Z0-9\-]+'
+    Default: EXAMPLE
+    Description: NetBIOS name of the domain (up to 15 characters) for users of earlier
+      versions of Windows e.g. EXAMPLE
+    MaxLength: '15'
+    MinLength: '1'
+    Type: String
+  ADServer1PrivateIP:
+    Default: 10.0.0.1
+    Description: Specify the DNS Server IP
+    Type: String
+  ADServer2PrivateIP:
+    Default: 10.0.0.2
+    Description: Specify the additional DNS Server IP
+    Type: String
+  KeyPairName:
+    Description: Public/private key pairs allow you to securely connect to your instance
+      after it launches
+    Type: AWS::EC2::KeyPair::KeyName
+  PrivateSubnet1ID:
+    Description: ID of the private subnet 1 in Availability Zone 1 (e.g., subnet-a0246dcd)
+    Type: AWS::EC2::Subnet::Id
+  PrivateSubnet2ID:
+    Description: ID of the private subnet 2 in Availability Zone 2 (e.g., subnet-a0246dcd)
+    Type: AWS::EC2::Subnet::Id
+  PublicSubnet1ID:
+    Description: ID of the private subnet 1 in Availability Zone 1 (e.g., subnet-a0246dcd)
+    Type: AWS::EC2::Subnet::Id
+  PublicSubnet2ID:
+    Description: ID of the private subnet 1 in Availability Zone 1 (e.g., subnet-a0246dcd)
+    Type: AWS::EC2::Subnet::Id
+  QSS3BucketName:
+    AllowedPattern: ^[0-9a-zA-Z]+([0-9a-zA-Z-]*[0-9a-zA-Z])*$
+    ConstraintDescription: Quick Start bucket name can include numbers, lowercase
+      letters, uppercase letters, and hyphens (-). It cannot start or end with a hyphen
+      (-).
+    Default: aws-quickstart
+    Description: S3 bucket name for the Quick Start assets. Quick Start bucket name
+      can include numbers, lowercase letters, uppercase letters, and hyphens (-).
+      It cannot start or end with a hyphen (-).
+    Type: String
+  QSS3BucketRegion:
+    Default: 'us-east-1'
+    Description: 'AWS Region where the Quick Start S3 bucket (QSS3BucketName) is 
+    hosted. Keep the default Region unless you are customizing the template. 
+    Changing this Region updates code references to point to a new Quick Start location. 
+    When using your own bucket, specify the Region. 
+    See https://aws-quickstart.github.io/option1.html.'
+    Type: String
+  QSS3KeyPrefix:
+    AllowedPattern: ^[0-9a-zA-Z-/]*$
+    ConstraintDescription: Quick Start key prefix can include numbers, lowercase letters,
+      uppercase letters, hyphens (-), and forward slash (/).
+    Default: quickstart-microsoft-hpc/
+    Description: S3 key prefix for the Quick Start assets. Quick Start key prefix
+      can include numbers, lowercase letters, uppercase letters, hyphens (-), and
+      forward slash (/).
+    Type: String
+  VPCID:
+    Description: ID of the VPC (e.g., vpc-0343606e)
+    Type: AWS::EC2::VPC::Id
+  HeadNodeInstanceType:
+    AllowedValues:
+      - c5.large
+      - c5.xlarge
+      - c5.2xlarge
+    Default: c5.large
+    Description: Amazon EC2 instance type for a Head Node to run MS HPCPACK Cluster
+      software
+    Type: String
+  HeadNodeNetBIOSName:
+    AllowedPattern: '[a-zA-Z0-9\-]+'
+    Default: hpcbar
+    Description: NetBIOS name of the HeadNode (up to 15 characters)
+    MaxLength: '15'
+    MinLength: '1'
+    Type: String
+  JumpServerNetBIOSName:
+    AllowedPattern: '[a-zA-Z0-9\-]+'
+    Default: Jumpbox
+    Description: NetBIOS name of the Jump (up to 15 characters)
+    MaxLength: '15'
+    MinLength: '1'
+    Type: String
+  HeadNodeSGID:
+    Description: ID of the Head Node Security Group (e.g., sg-7f16e910)
+    Type: AWS::EC2::SecurityGroup::Id
+  MicrosoftAD:
+    AllowedPattern: '[a-zA-Z0-9\-]+'
+    Description: Please provide the directory ID of MAD
+    MaxLength: '15'
+    MinLength: '1'
+    Type: String
+  HeadNodeAMI:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-windows-latest/Windows_Server-2019-English-Full-SQL_2019_Standard
+  FileSystemName:
+    AllowedPattern: '[a-zA-Z0-9\-]+'
+    Default: hpcstorage
+    Description: Please provide the name of the filesystem for Windows FSX Storage
+    MaxLength: '15'
+    MinLength: '1'
+    Type: String
+  JumpServerAMI:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-windows-latest/Windows_Server-2019-English-Full-Base
+    Description: "Enter an AMI Id. The default value is Windows Server 2019 Core:\n\
+      /aws/service/ami-windows-latest/Windows_Server-2019-English-Full-Base."
+  StorageCapacity:
+    AllowedValues:
+      - '40'
+      - '50'
+      - '60'
+    Default: '40'
+    Description: Provide the Storage capacity required for FSX shared storage
+    Type: String
+  ThroughputCapacity:
+    AllowedValues:
+      - '8'
+      - '16'
+    Default: '8'
+    Description: Provide the throughput capacity required for FSX shared storage
+    Type: String
+Conditions:
+  UsingDefaultBucket: !Equals [!Ref QSS3BucketName, 'aws-quickstart']
+Mappings:
+  AWSAMIRegionMap:
+    AMI:
+      WS2012R2: Windows_Server-2012-R2_RTM-English-64Bit-Base-2018.07.11
+      WS2012R2SQL2014SP2ENT: Windows_Server-2012-R2_RTM-English-64Bit-SQL_2014_SP2_Enterprise-2018.07.11
+      WS2012R2SQL2016SP1ENT: Windows_Server-2012-R2_RTM-English-64Bit-SQL_2016_SP1_Enterprise-2018.07.11
+      WS2016FULLBASE: Windows_Server-2016-English-Full-Base-2018.07.11
+      WS2016FULLSQL2017ENT: Windows_Server-2016-English-Full-SQL_2017_Enterprise-2018.07.11
+    ap-northeast-1:
+      WS2012R2: ami-a73c5e4a
+      WS2012R2SQL2014SP2ENT: ami-020664ef
+      WS2012R2SQL2016SP1ENT: ami-060664eb
+      WS2016FULLBASE: ami-49096ba4
+      WS2016FULLSQL2017ENT: ami-a5197b48
+    ap-northeast-2:
+      WS2012R2: ami-28398d46
+      WS2012R2SQL2014SP2ENT: ami-d5398dbb
+      WS2012R2SQL2016SP1ENT: ami-d12094bf
+      WS2016FULLBASE: ami-07219569
+      WS2016FULLSQL2017ENT: ami-ad2397c3
+    ap-northeast-3:
+      WS2012R2: ami-04474e79
+      WS2012R2SQL2014SP2ENT: ami-1c424b61
+      WS2012R2SQL2016SP1ENT: ami-1e424b63
+      WS2016FULLBASE: ami-88424bf5
+      WS2016FULLSQL2017ENT: ami-fb585186
+    ap-south-1:
+      WS2012R2: ami-e013228f
+      WS2012R2SQL2014SP2ENT: ami-1d2b1a72
+      WS2012R2SQL2016SP1ENT: ami-1355647c
+      WS2016FULLBASE: ami-ae1627c1
+      WS2016FULLSQL2017ENT: ami-ce1627a1
+    ap-southeast-1:
+      WS2012R2: ami-43e49da9
+      WS2012R2SQL2014SP2ENT: ami-37e39add
+      WS2012R2SQL2016SP1ENT: ami-b6e29b5c
+      WS2016FULLBASE: ami-84e79e6e
+      WS2016FULLSQL2017ENT: ami-21dca5cb
+    ap-southeast-2:
+      WS2012R2: ami-e3862381
+      WS2012R2SQL2014SP2ENT: ami-ea852088
+      WS2012R2SQL2016SP1ENT: ami-b68124d4
+      WS2016FULLBASE: ami-d48623b6
+      WS2016FULLSQL2017ENT: ami-5ebf1a3c
+    ca-central-1:
+      WS2012R2: ami-f334b697
+      WS2012R2SQL2014SP2ENT: ami-a43fbdc0
+      WS2012R2SQL2016SP1ENT: ami-4d3ebc29
+      WS2016FULLBASE: ami-303ebc54
+      WS2016FULLSQL2017ENT: ami-6e3fbd0a
+    eu-central-1:
+      WS2012R2: ami-f7ece81c
+      WS2012R2SQL2014SP2ENT: ami-38cfcbd3
+      WS2012R2SQL2016SP1ENT: ami-9be0e470
+      WS2016FULLBASE: ami-6af7f381
+      WS2016FULLSQL2017ENT: ami-c0f3f72b
+    eu-west-1:
+      WS2012R2: ami-5ef8ebb4
+      WS2012R2SQL2014SP2ENT: ami-51f5e6bb
+      WS2012R2SQL2016SP1ENT: ami-52f8ebb8
+      WS2016FULLBASE: ami-96e1f27c
+      WS2016FULLSQL2017ENT: ami-6af5e680
+    eu-west-2:
+      WS2012R2: ami-a3b259c4
+      WS2012R2SQL2014SP2ENT: ami-aeb358c9
+      WS2012R2SQL2016SP1ENT: ami-44b75c23
+      WS2016FULLBASE: ami-9bb358fc
+      WS2016FULLSQL2017ENT: ami-08b55e6f
+    eu-west-3:
+      WS2012R2: ami-e0b1019d
+      WS2012R2SQL2014SP2ENT: ami-e1b1019c
+      WS2012R2SQL2016SP1ENT: ami-85b505f8
+      WS2016FULLBASE: ami-23b6065e
+      WS2016FULLSQL2017ENT: ami-1ab50567
+    sa-east-1:
+      WS2012R2: ami-fac4e396
+      WS2012R2SQL2014SP2ENT: ami-f5c8ef99
+      WS2012R2SQL2016SP1ENT: ami-6ed3f402
+      WS2016FULLBASE: ami-36caed5a
+      WS2016FULLSQL2017ENT: ami-ccc4e3a0
+    us-east-1:
+      WS2012R2: ami-60093e1f
+      WS2012R2SQL2014SP2ENT: ami-0a6b5c75
+      WS2012R2SQL2016SP1ENT: ami-70f9ce0f
+      WS2016FULLBASE: ami-2d360152
+      WS2016FULLSQL2017ENT: ami-b85b6cc7
+    us-east-2:
+      WS2012R2: ami-ca2318af
+      WS2012R2SQL2014SP2ENT: ami-c32c17a6
+      WS2012R2SQL2016SP1ENT: ami-e4231881
+      WS2016FULLBASE: ami-36241f53
+      WS2016FULLSQL2017ENT: ami-a5201bc0
+    us-west-1:
+      WS2012R2: ami-132ac970
+      WS2012R2SQL2014SP2ENT: ami-1b2bc878
+      WS2012R2SQL2016SP1ENT: ami-b52bc8d6
+      WS2016FULLBASE: ami-d12ecdb2
+      WS2016FULLSQL2017ENT: ami-5732d134
+    us-west-2:
+      WS2012R2: ami-490b5831
+      WS2012R2SQL2014SP2ENT: ami-651f4c1d
+      WS2012R2SQL2016SP1ENT: ami-be184bc6
+      WS2016FULLBASE: ami-6d336015
+      WS2016FULLSQL2017ENT: ami-f60f5c8e
+  SQLAMINameMap:
+    '2014':
+      'no': WS2012R2
+      'yes': WS2012R2SQL2014SP2ENT
+    '2016':
+      'no': WS2012R2
+      'yes': WS2012R2SQL2016SP1ENT
+    '2017':
+      'no': WS2016FULLBASE
+      'yes': WS2016FULLSQL2017ENT
+Resources:
+  HeadNodeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+                - ssm.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Action:
+                  - s3:GetObject
+                Resource:
+                  - !Sub ['arn:${AWS::Partition}:s3:::${S3Bucket}/${QSS3KeyPrefix}*', S3Bucket: !If [UsingDefaultBucket, !Sub '${QSS3BucketName}-${AWS::Region}', !Ref QSS3BucketName]]
+                  - !Sub ['arn:${AWS::Partition}:s3:::${S3Bucket}', S3Bucket: !If [UsingDefaultBucket, !Sub '${QSS3BucketName}-${AWS::Region}', !Ref QSS3BucketName]]
+                Effect: Allow
+              - Effect: Allow
+                Action:
+                  - ec2:Describe*
+                  - ssm:*
+                  - ec2:StopInstances
+                  - ec2:StartInstances
+                  - ec2:RebootInstances
+                  - ec2:CreateImage
+                  - ec2:DeregisterImage
+                  - ec2:RunInstances
+                  - ec2:TerminateInstances
+                  - ec2:AttachVolume
+                  - ec2:DetachVolume
+                  - ec2:CreateVolume
+                  - ec2:DeleteVolume
+                  - autoscaling:UpdateAutoScalingGroup
+                  - autoscaling:CreateAutoScalingGroup
+                  - iam:CreateServiceLinkedRole
+                  - ec2:CreateTags
+                  - ec2:DeleteTags
+                  - ec2:DescribeTags
+                  - autoscaling:AttachInstances
+                  - autoscaling:CreateOrUpdateTags
+                  - autoscaling:DeleteTags
+                  - autoscaling:Describe*
+                  - autoscaling:DetachInstances
+                  - autoscaling:SetDesiredCapacity
+                  - autoscaling:SetInstanceHealth
+                  - autoscaling:SetInstanceProtection
+                  - autoscaling:SuspendProcesses
+                  - autoscaling:TerminateInstanceInAutoScalingGroup
+                  - autoscaling:UpdateAutoScalingGroup
+                Resource: '*'
+  HeadNodeInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref 'HeadNodeRole'
+  HeadNodeWaitCondition:
+    Type: AWS::CloudFormation::WaitCondition
+    DependsOn: HeadNode
+    Properties:
+      Handle: !Ref 'HeadNodeWaitHandle'
+      Timeout: '3600'
+  HeadNodeWaitHandle:
+    Type: AWS::CloudFormation::WaitConditionHandle
+  HeadNode:
+    Type: AWS::EC2::Instance
+    Metadata:
+      AWS::CloudFormation::Authentication:
+        S3AccessCreds:
+          type: S3
+          roleName: !Ref 'HeadNodeRole'
+      AWS::CloudFormation::Init:
+        configSets:
+          config:
+            - FetchResources
+            - QuickStartSetup
+            - Prep
+            - Cleanup
+            - Finalize
+        FetchResources:
+          files:
+            C:\cfn\scripts\Unzip-Archive.ps1:
+              source: !Sub
+                - https://${S3Bucket}.s3.${S3Region}.${AWS::URLSuffix}/${QSS3KeyPrefix}scripts/Unzip-Archive.ps1
+                - S3Region: !If [UsingDefaultBucket, !Ref 'AWS::Region', !Ref QSS3BucketRegion]
+                  S3Bucket: !If [UsingDefaultBucket, !Sub '${QSS3BucketName}-${AWS::Region}', !Ref QSS3BucketName]
+              authentication: S3AccessCreds
+            C:\cfn\modules\AWSQuickStart.zip:
+              source: !Sub
+                - https://${S3Bucket}.s3.${S3Region}.${AWS::URLSuffix}/${QSS3KeyPrefix}scripts/AWSQuickStart.zip
+                - S3Region: !If [UsingDefaultBucket, !Ref 'AWS::Region', !Ref QSS3BucketRegion]
+                  S3Bucket: !If [UsingDefaultBucket, !Sub '${QSS3BucketName}-${AWS::Region}', !Ref QSS3BucketName]
+              authentication: S3AccessCreds
+            C:\cfn\scripts\Join-Domain.ps1:
+              source: !Sub
+                - https://${S3Bucket}.s3.${S3Region}.${AWS::URLSuffix}/${QSS3KeyPrefix}scripts/Join-Domain.ps1
+                - S3Region: !If [UsingDefaultBucket, !Ref 'AWS::Region', !Ref QSS3BucketRegion]
+                  S3Bucket: !If [UsingDefaultBucket, !Sub '${QSS3BucketName}-${AWS::Region}', !Ref QSS3BucketName]
+              authentication: S3AccessCreds
+            C:\cfn\scripts\Rename-Computer.ps1:
+              source: !Sub
+                - https://${S3Bucket}.s3.${S3Region}.${AWS::URLSuffix}/${QSS3KeyPrefix}scripts/Rename-Computer.ps1
+                - S3Region: !If [UsingDefaultBucket, !Ref 'AWS::Region', !Ref QSS3BucketRegion]
+                  S3Bucket: !If [UsingDefaultBucket, !Sub '${QSS3BucketName}-${AWS::Region}', !Ref QSS3BucketName]
+              authentication: S3AccessCreds
+            C:\cfn\scripts\Enable-CredSSP.ps1:
+              source: !Sub
+                - https://${S3Bucket}.s3.${S3Region}.${AWS::URLSuffix}/${QSS3KeyPrefix}scripts/Enable-CredSSP.ps1
+                - S3Region: !If [UsingDefaultBucket, !Ref 'AWS::Region', !Ref QSS3BucketRegion]
+                  S3Bucket: !If [UsingDefaultBucket, !Sub '${QSS3BucketName}-${AWS::Region}', !Ref QSS3BucketName]
+              authentication: S3AccessCreds
+            C:\cfn\scripts\Test-ADUser.ps1:
+              source: !Sub
+                - https://${S3Bucket}.s3.${S3Region}.${AWS::URLSuffix}/${QSS3KeyPrefix}scripts/Test-ADUser.ps1
+                - S3Region: !If [UsingDefaultBucket, !Ref 'AWS::Region', !Ref QSS3BucketRegion]
+                  S3Bucket: !If [UsingDefaultBucket, !Sub '${QSS3BucketName}-${AWS::Region}', !Ref QSS3BucketName]
+              authentication: S3AccessCreds
+            C:\cfn\scripts\AddUserToGroup.ps1:
+              source: !Sub
+                - https://${S3Bucket}.s3.${S3Region}.${AWS::URLSuffix}/${QSS3KeyPrefix}scripts/AddUserToGroup.ps1
+                - S3Region: !If [UsingDefaultBucket, !Ref 'AWS::Region', !Ref QSS3BucketRegion]
+                  S3Bucket: !If [UsingDefaultBucket, !Sub '${QSS3BucketName}-${AWS::Region}', !Ref QSS3BucketName]
+              authentication: S3AccessCreds
+            C:\cfn\scripts\Disable-CredSSP.ps1:
+              source: !Sub
+                - https://${S3Bucket}.s3.${S3Region}.${AWS::URLSuffix}/${QSS3KeyPrefix}scripts/Disable-CredSSP.ps1
+                - S3Region: !If [UsingDefaultBucket, !Ref 'AWS::Region', !Ref QSS3BucketRegion]
+                  S3Bucket: !If [UsingDefaultBucket, !Sub '${QSS3BucketName}-${AWS::Region}', !Ref QSS3BucketName]
+              authentication: S3AccessCreds
+            C:\cfn\scripts\PrepareNode.ps1:
+              source: !Sub
+                - https://${S3Bucket}.s3.${S3Region}.${AWS::URLSuffix}/${QSS3KeyPrefix}scripts/PrepareNode.ps1
+                - S3Region: !If [UsingDefaultBucket, !Ref 'AWS::Region', !Ref QSS3BucketRegion]
+                  S3Bucket: !If [UsingDefaultBucket, !Sub '${QSS3BucketName}-${AWS::Region}', !Ref QSS3BucketName]
+              authentication: S3AccessCreds
+            C:\cfn\scripts\ConfigHeadNode.ps1:
+              source: !Sub
+                - https://${S3Bucket}.s3.${S3Region}.${AWS::URLSuffix}/${QSS3KeyPrefix}scripts/ConfigHeadNode.ps1
+                - S3Region: !If [UsingDefaultBucket, !Ref 'AWS::Region', !Ref QSS3BucketRegion]
+                  S3Bucket: !If [UsingDefaultBucket, !Sub '${QSS3BucketName}-${AWS::Region}', !Ref QSS3BucketName]
+              authentication: S3AccessCreds
+            C:\cfn\scripts\ConfigureNetwork.ps1:
+              source: !Sub
+                - https://${S3Bucket}.s3.${S3Region}.${AWS::URLSuffix}/${QSS3KeyPrefix}scripts/ConfigureNetwork.ps1
+                - S3Region: !If [UsingDefaultBucket, !Ref 'AWS::Region', !Ref QSS3BucketRegion]
+                  S3Bucket: !If [UsingDefaultBucket, !Sub '${QSS3BucketName}-${AWS::Region}', !Ref QSS3BucketName]
+              authentication: S3AccessCreds
+        QuickStartSetup:
+          commands:
+            a-set-execution-policy:
+              command: powershell.exe -Command "Set-ExecutionPolicy RemoteSigned -Force"
+              waitAfterCompletion: '0'
+            b-unpack-quickstart-module:
+              command: powershell.exe -Command C:\cfn\scripts\Unzip-Archive.ps1 -Source
+                C:\cfn\modules\AWSQuickStart.zip -Destination C:\Windows\system32\WindowsPowerShell\v1.0\Modules\
+              waitAfterCompletion: '0'
+            c-init-quickstart-module:
+              command: !Join
+                - ''
+                - - powershell.exe -Command "
+                  - New-AWSQuickStartWaitHandle -Handle '
+                  - !Ref 'HeadNodeWaitHandle'
+                  - '''"'
+              waitAfterCompletion: '0'
+        Prep:
+          commands:
+            a-rename-computer:
+              command: !Join
+                - ''
+                - - powershell.exe -Command "C:\cfn\scripts\Rename-Computer.ps1 -Restart
+                    -NewName '
+                  - !Ref 'HeadNodeNetBIOSName'
+                  - '''"'
+              waitAfterCompletion: forever
+            b-join-domain:
+              command: !Join
+                - ''
+                - - powershell.exe -Command "C:\cfn\scripts\Join-Domain.ps1 -DomainName
+                    '
+                  - !Ref 'DomainDNSName'
+                  - ''' -UserName '''
+                  - !Ref 'DomainAdminUser'
+                  - ''' -Password '''
+                  - !Ref 'DomainAdminPassword'
+                  - '''"'
+              waitAfterCompletion: forever
+            c-enable-credssp:
+              command: powershell.exe -ExecutionPolicy RemoteSigned -Command "C:\cfn\scripts\Enable-CredSSP.ps1
+              waitAfterCompletion: '0'
+            d-add-domadmin-user-to-group:
+              command: !Join
+                - ''
+                - - 'powershell.exe '
+                  - '-ExecutionPolicy RemoteSigned '
+                  - -Command "
+                  - ' C:\cfn\scripts\AddUserToGroup.ps1 -UserName '''
+                  - !Ref 'DomainAdminUser'
+                  - ''' -GroupName ''Administrators''"'
+              waitAfterCompletion: '0'
+            e-PrepareNode:
+              command: powershell.exe -ExecutionPolicy RemoteSigned -Command "C:\cfn\scripts\PrepareNode.ps1"
+              waitAfterCompletion: '0'
+            f-ConfigureHeadNode:
+              command: !Join
+                - ''
+                - - powershell.exe -ExecutionPolicy RemoteSigned -Command "C:\cfn\scripts\ConfigHeadNode.ps1  -DomainNetBIOSName
+                    '
+                  - !Ref 'DomainNetBIOSName'
+                  - ''' -DomainAdminUser '''
+                  - !Ref 'DomainAdminUser'
+                  - ''' -DomainAdminPassword '''
+                  - !Ref 'DomainAdminPassword'
+                  - ''' -QSS3BucketName '''
+                  - !Ref 'QSS3BucketName'
+                  - '''"'
+              waitAfterCompletion: '0'
+            g-configure-network:
+              command: !Join
+                - ''
+                - - 'powershell.exe '
+                  - '-ExecutionPolicy RemoteSigned '
+                  - -Command "
+                  - ' C:\cfn\scripts\ConfigureNetwork.ps1 -DomainAdminPassword '''
+                  - !Ref 'DomainAdminPassword'
+                  - ''' -DomainAdminUser '''
+                  - !Ref 'DomainAdminUser'
+                  - '''"'
+              waitAfterCompletion: '0'
+        Cleanup:
+          commands:
+            a-disable-credssp:
+              command: powershell.exe -ExecutionPolicy RemoteSigned -Command "C:\cfn\scripts\Disable-CredSSP.ps1"
+              waitAfterCompletion: '0'
+        Finalize:
+          commands:
+            a-signal-success:
+              command: powershell -Command "Write-AWSQuickStartStatus"
+              waitAfterCompletion: '0'
+    Properties:
+      ImageId: !Ref 'HeadNodeAMI'
+      IamInstanceProfile: !Ref 'HeadNodeInstanceProfile'
+      InstanceType: !Ref 'HeadNodeInstanceType'
+      NetworkInterfaces:
+        - DeleteOnTermination: 'true'
+          DeviceIndex: 0
+          SubnetId: !Ref 'PrivateSubnet1ID'
+          GroupSet:
+            - !Ref 'DomainMemberSGID'
+            - !Ref 'HeadNodeSGID'
+      Tags:
+        - Key: Name
+          Value: !Ref 'HeadNodeNetBIOSName'
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: '100'
+            VolumeType: gp2
+      KeyName: !Ref 'KeyPairName'
+      UserData: !Base64
+        Fn::Join:
+          - ''
+          - - "<script>\n"
+            - 'cfn-init.exe -v -c config -s '
+            - !Ref 'AWS::StackId'
+            - ' -r HeadNode '
+            - ' --region '
+            - !Ref 'AWS::Region'
+            - "\n"
+            - </script>
+  JumpServer:
+    Type: AWS::EC2::Instance
+    Metadata:
+      AWS::CloudFormation::Authentication:
+        S3AccessCreds:
+          type: S3
+          roleName: !Ref 'HeadNodeRole'
+      AWS::CloudFormation::Init:
+        configSets:
+          config:
+            - FetchResources
+            - QuickStartSetup
+            - Prep
+            - Cleanup
+            - Finalize
+        FetchResources:
+          files:
+            C:\cfn\scripts\Unzip-Archive.ps1:
+              source: !Sub
+                - https://${S3Bucket}.s3.${S3Region}.${AWS::URLSuffix}/${QSS3KeyPrefix}scripts/Unzip-Archive.ps1
+                - S3Region: !If [UsingDefaultBucket, !Ref 'AWS::Region', !Ref QSS3BucketRegion]
+                  S3Bucket: !If [UsingDefaultBucket, !Sub '${QSS3BucketName}-${AWS::Region}', !Ref QSS3BucketName]
+              authentication: S3AccessCreds
+            C:\cfn\modules\AWSQuickStart.zip:
+              source: !Sub
+                - https://${S3Bucket}.s3.${S3Region}.${AWS::URLSuffix}/${QSS3KeyPrefix}scripts/AWSQuickStart.zip
+                - S3Region: !If [UsingDefaultBucket, !Ref 'AWS::Region', !Ref QSS3BucketRegion]
+                  S3Bucket: !If [UsingDefaultBucket, !Sub '${QSS3BucketName}-${AWS::Region}', !Ref QSS3BucketName]
+              authentication: S3AccessCreds
+            C:\cfn\scripts\Join-Domain.ps1:
+              source: !Sub
+                - https://${S3Bucket}.s3.${S3Region}.${AWS::URLSuffix}/${QSS3KeyPrefix}scripts/Join-Domain.ps1
+                - S3Region: !If [UsingDefaultBucket, !Ref 'AWS::Region', !Ref QSS3BucketRegion]
+                  S3Bucket: !If [UsingDefaultBucket, !Sub '${QSS3BucketName}-${AWS::Region}', !Ref QSS3BucketName]
+              authentication: S3AccessCreds
+            C:\cfn\scripts\Enable-CredSSP.ps1:
+              source: !Sub
+                - https://${S3Bucket}.s3.${S3Region}.${AWS::URLSuffix}/${QSS3KeyPrefix}scripts/Enable-CredSSP.ps1
+                - S3Region: !If [UsingDefaultBucket, !Ref 'AWS::Region', !Ref QSS3BucketRegion]
+                  S3Bucket: !If [UsingDefaultBucket, !Sub '${QSS3BucketName}-${AWS::Region}', !Ref QSS3BucketName]
+              authentication: S3AccessCreds
+            C:\cfn\scripts\Test-ADUser.ps1:
+              source: !Sub
+                - https://${S3Bucket}.s3.${S3Region}.${AWS::URLSuffix}/${QSS3KeyPrefix}scripts/Test-ADUser.ps1
+                - S3Region: !If [UsingDefaultBucket, !Ref 'AWS::Region', !Ref QSS3BucketRegion]
+                  S3Bucket: !If [UsingDefaultBucket, !Sub '${QSS3BucketName}-${AWS::Region}', !Ref QSS3BucketName]
+              authentication: S3AccessCreds
+            C:\cfn\scripts\AddUserToGroup.ps1:
+              source: !Sub
+                - https://${S3Bucket}.s3.${S3Region}.${AWS::URLSuffix}/${QSS3KeyPrefix}scripts/AddUserToGroup.ps1
+                - S3Region: !If [UsingDefaultBucket, !Ref 'AWS::Region', !Ref QSS3BucketRegion]
+                  S3Bucket: !If [UsingDefaultBucket, !Sub '${QSS3BucketName}-${AWS::Region}', !Ref QSS3BucketName]
+              authentication: S3AccessCreds
+            C:\cfn\scripts\Disable-CredSSP.ps1:
+              source: !Sub
+                - https://${S3Bucket}.s3.${S3Region}.${AWS::URLSuffix}/${QSS3KeyPrefix}scripts/Disable-CredSSP.ps1
+                - S3Region: !If [UsingDefaultBucket, !Ref 'AWS::Region', !Ref QSS3BucketRegion]
+                  S3Bucket: !If [UsingDefaultBucket, !Sub '${QSS3BucketName}-${AWS::Region}', !Ref QSS3BucketName]
+              authentication: S3AccessCreds
+            C:\cfn\scripts\PrepareNode.ps1:
+              source: !Sub
+                - https://${S3Bucket}.s3.${S3Region}.${AWS::URLSuffix}/${QSS3KeyPrefix}scripts/PrepareNode.ps1
+                - S3Region: !If [UsingDefaultBucket, !Ref 'AWS::Region', !Ref QSS3BucketRegion]
+                  S3Bucket: !If [UsingDefaultBucket, !Sub '${QSS3BucketName}-${AWS::Region}', !Ref QSS3BucketName]
+              authentication: S3AccessCreds
+            C:\cfn\scripts\ConfigJumpBox.ps1:
+              source: !Sub
+                - https://${S3Bucket}.s3.${S3Region}.${AWS::URLSuffix}/${QSS3KeyPrefix}scripts/ConfigJumpBox.ps1
+                - S3Region: !If [UsingDefaultBucket, !Ref 'AWS::Region', !Ref QSS3BucketRegion]
+                  S3Bucket: !If [UsingDefaultBucket, !Sub '${QSS3BucketName}-${AWS::Region}', !Ref QSS3BucketName]
+              authentication: S3AccessCreds
+        QuickStartSetup:
+          commands:
+            a-set-execution-policy:
+              command: powershell.exe -Command "Set-ExecutionPolicy RemoteSigned -Force"
+              waitAfterCompletion: '0'
+            b-unpack-quickstart-module:
+              command: powershell.exe -Command C:\cfn\scripts\Unzip-Archive.ps1 -Source
+                C:\cfn\modules\AWSQuickStart.zip -Destination C:\Windows\system32\WindowsPowerShell\v1.0\Modules\
+              waitAfterCompletion: '0'
+            c-init-quickstart-module:
+              command: !Join
+                - ''
+                - - powershell.exe -Command "
+                  - New-AWSQuickStartWaitHandle -Handle '
+                  - !Ref 'HeadNodeWaitHandle'
+                  - '''"'
+              waitAfterCompletion: '0'
+        Prep:
+          commands:
+            a-join-domain:
+              command: !Join
+                - ''
+                - - powershell.exe -Command "C:\cfn\scripts\Join-Domain.ps1 -DomainName
+                    '
+                  - !Ref 'DomainDNSName'
+                  - ''' -UserName '''
+                  - !Ref 'DomainAdminUser'
+                  - ''' -Password '''
+                  - !Ref 'DomainAdminPassword'
+                  - '''"'
+              waitAfterCompletion: forever
+            b-enable-credssp:
+              command: powershell.exe -ExecutionPolicy RemoteSigned -Command "C:\cfn\scripts\Enable-CredSSP.ps1
+              waitAfterCompletion: '0'
+            c-add-domadmin-user-to-group:
+              command: !Join
+                - ''
+                - - 'powershell.exe '
+                  - '-ExecutionPolicy RemoteSigned '
+                  - -Command "
+                  - ' C:\cfn\scripts\AddUserToGroup.ps1 -UserName '''
+                  - !Ref 'DomainAdminUser'
+                  - ''' -GroupName ''Administrators''"'
+              waitAfterCompletion: '0'
+            d-PrepareNode:
+              command: powershell.exe -ExecutionPolicy RemoteSigned -Command "C:\cfn\scripts\PrepareNode.ps1"
+              waitAfterCompletion: '0'
+            f-ConfigureJumpbox:
+              command: !Join
+                - ''
+                - - powershell.exe -ExecutionPolicy RemoteSigned -Command "C:\cfn\scripts\ConfigJumpBox.ps1  -DomainAdminPassword
+                    '
+                  - !Ref 'DomainAdminPassword'
+                  - ''' -QSS3BucketName '''
+                  - !Ref 'QSS3BucketName'
+                  - '''"'
+              waitAfterCompletion: '0'
+        Cleanup:
+          commands:
+            a-disable-credssp:
+              command: powershell.exe -ExecutionPolicy RemoteSigned -Command "C:\cfn\scripts\Disable-CredSSP.ps1"
+              waitAfterCompletion: '0'
+        Finalize:
+          commands:
+            a-signal-success:
+              command: powershell -Command "Write-AWSQuickStartStatus"
+              waitAfterCompletion: '0'
+    Properties:
+      ImageId: !Ref 'JumpServerAMI'
+      IamInstanceProfile: !Ref 'HeadNodeInstanceProfile'
+      InstanceType: !Ref 'HeadNodeInstanceType'
+      NetworkInterfaces:
+        - DeleteOnTermination: 'true'
+          DeviceIndex: 0
+          SubnetId: !Ref 'PublicSubnet1ID'
+          GroupSet:
+            - !Ref 'DomainMemberSGID'
+            - !Ref 'HeadNodeSGID'
+      Tags:
+        - Key: Name
+          Value: !Ref 'JumpServerNetBIOSName'
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: '100'
+            VolumeType: gp2
+      KeyName: !Ref 'KeyPairName'
+      UserData: !Base64
+        Fn::Join:
+          - ''
+          - - "<script>\n"
+            - 'cfn-init.exe -v -c config -s '
+            - !Ref 'AWS::StackId'
+            - ' -r JumpServer '
+            - ' --region '
+            - !Ref 'AWS::Region'
+            - "\n"
+            - </script>
+  WindowsFSXStorage:
+    Type: AWS::FSx::FileSystem
+    Properties:
+      FileSystemType: WINDOWS
+      StorageCapacity: !Ref 'StorageCapacity'
+      SubnetIds:
+        - !Ref 'PrivateSubnet1ID'
+      SecurityGroupIds:
+        - !Ref 'DomainMemberSGID'
+      Tags:
+        - Key: Name
+          Value: !Ref 'FileSystemName'
+      WindowsConfiguration:
+        ActiveDirectoryId: !Ref 'MicrosoftAD'
+        ThroughputCapacity: !Ref 'ThroughputCapacity'
+Outputs:
+  FSXDnsName:
+    Value: !Join
+      - ''
+      - - !Ref 'WindowsFSXStorage'
+        - .
+        - !Ref 'DomainDNSName'
+        - \
+        - share
+    Description: FSX DnsName for mapping share
+  FileSystemId:
+    Value: !Ref 'WindowsFSXStorage'
+    Description: FSX Windows Filesytem ID

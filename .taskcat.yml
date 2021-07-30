@@ -1,0 +1,18 @@
+project:
+  name: quickstart-microsoft-hpc
+  owner: quickstart-eng@amazon.com
+  package_lambda: false
+  regions:
+  - us-east-1
+  s3_bucket: ''
+tests:
+  MSFTHPC:
+    parameters:
+      AvailabilityZones: $[taskcat_getaz_2]
+      DomainAdminPassword: $[taskcat_genpass_16]
+      KeyPairName: $[taskcat_getkeypair]
+      QSS3BucketName: $[taskcat_autobucket]
+      QSS3BucketRegion: $[taskcat_current_region]
+    regions:
+    - us-east-1
+    template: templates/main.template.yaml
