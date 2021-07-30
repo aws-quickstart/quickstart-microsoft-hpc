@@ -1,6 +1,12 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: This is  the master template for Microsoft HPCPACK 2019
+Description: This is the main template for Microsoft HPC (qs-1s4u7q63u)
 Metadata:
+  cfn-lint:
+    config:
+      ignore_checks:
+        - W9901
+        - W9002
+        - W9006
   QuickStartDocumentation:
     EntrypointName: "Parameters for deploying into a new VPC"
     Order: "1"
@@ -15,6 +21,7 @@ Metadata:
           - PublicSubnet2CIDR
           - PrivateSubnet1CIDR
           - PrivateSubnet2CIDR
+          - RemoteAccessCIDR
       - Label:
           default: Active Directory Configuration
         Parameters:
@@ -27,8 +34,13 @@ Metadata:
         Parameters:
           - HeadNodeInstanceType
           - HeadNodeNetBIOSName
-          - HeadNodeAMI
+        #  - HeadNodeAMI
           - KeyPairName
+      - Label:
+          default: Certificate Configuration
+        Parameters:
+          - CertS3Bucket
+          - CertS3Key
       - Label:
           default: AWS Quick Start Configuration
         Parameters:
@@ -42,13 +54,19 @@ Metadata:
           - ASGName
           - HTCoreCount
           - ThreadsPerCore
-      - Label:
-          default: FSX Storage Configuration
-        Parameters:
-          - FileSystemName
-          - StorageCapacity
-          - ThroughputCapacity
+      # - Label:
+      #     default: FSX Storage Configuration
+      #   Parameters:
+      #     - FileSystemName
+      #     - StorageCapacity
+      #     - ThroughputCapacity
     ParameterLabels:
+      CertS3Bucket:
+        default: Certificate S3 bucket
+      CertS3Key:
+        default: Certificate S3 key
+      RemoteAccessCIDR:
+        default: Remote access CIDR
       PrivateSubnet1CIDR:
         default: Private Subnet 1 CIDR
       PrivateSubnet2CIDR:
@@ -67,18 +85,18 @@ Metadata:
         default: AWS Microsoft AD edition
       VPCCIDR:
         default: VPC CIDR
-      HeadNodeAMI:
-        default: HeadNodeAMI
+      # HeadNodeAMI:
+      #   default: HeadNodeAMI
       HeadNodeNetBIOSName:
         default: Head Node NetBIOS Name
       HeadNodeInstanceType:
         default: Head Node Instance Type
-      FileSystemName:
-        default: FileSystemName
-      StorageCapacity:
-        default: StorageCapacity
-      ThroughputCapacity:
-        default: ThroughputCapacity
+      # FileSystemName:
+      #  default: FileSystemName
+      # StorageCapacity:
+      #   default: StorageCapacity
+      # ThroughputCapacity:
+      #   default: ThroughputCapacity
       QSS3BucketName:
         default: Quick Start S3 bucket name
       QSS3BucketRegion:
@@ -86,6 +104,17 @@ Metadata:
       QSS3KeyPrefix:
         default: Quick Start S3 key prefix
 Parameters:
+  CertS3Bucket:
+    AllowedPattern: '^[0-9a-zA-Z]+([0-9a-zA-Z-]*[0-9a-zA-Z])*$'
+    Description: S3 bucket containing the certificate
+    Type: String
+  CertS3Key:
+    Description: S3 key for the certificate
+    Type: String
+  RemoteAccessCIDR:
+    Description: Remote access CIDR
+    Default: "0.0.0.0/0"
+    Type: String
   PrivateSubnet1CIDR:
     AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
     Default: 10.0.2.0/24
@@ -207,28 +236,28 @@ Parameters:
     MaxLength: '15'
     MinLength: '1'
     Type: String
-  FileSystemName:
-    AllowedPattern: '[a-zA-Z0-9\-]+'
-    Default: hpcstorage
-    Description: Please provide the name of the filesystem for Windows FSX Storage
-    MaxLength: '15'
-    MinLength: '1'
-    Type: String
-  StorageCapacity:
-    AllowedValues:
-      - '40'
-      - '50'
-      - '60'
-    Default: '40'
-    Description: Provide the Storage capacity required for FSX shared storage
-    Type: String
-  ThroughputCapacity:
-    AllowedValues:
-      - '8'
-      - '16'
-    Default: '8'
-    Description: Provide the throughput capacity required for FSX shared storage
-    Type: String
+  # FileSystemName:
+  #   AllowedPattern: '[a-zA-Z0-9\-]+'
+  #   Default: hpcstorage
+  #   Description: Please provide the name of the filesystem for Windows FSX Storage
+  #   MaxLength: '15'
+  #   MinLength: '1'
+  #   Type: String
+  # StorageCapacity:
+  #   AllowedValues:
+  #     - '40'
+  #     - '50'
+  #     - '60'
+  #   Default: '40'
+  #   Description: Provide the Storage capacity required for FSX shared storage
+  #   Type: String
+  # ThroughputCapacity:
+  #   AllowedValues:
+  #     - '8'
+  #     - '16'
+  #   Default: '8'
+  #   Description: Provide the throughput capacity required for FSX shared storage
+  #   Type: String
   WorkerInstanceType:
     AllowedValues:
       - c5d.large
@@ -273,14 +302,12 @@ Resources:
         AvailabilityZones: !Join
           - ','
           - !Ref 'AvailabilityZones'
-        KeyPairName: !Ref 'KeyPairName'
         PrivateSubnet1ACIDR: !Ref 'PrivateSubnet1CIDR'
         PrivateSubnet2ACIDR: !Ref 'PrivateSubnet2CIDR'
         PublicSubnet1CIDR: !Ref 'PublicSubnet1CIDR'
         PublicSubnet2CIDR: !Ref 'PublicSubnet2CIDR'
         VPCCIDR: !Ref 'VPCCIDR'
   ADStack:
-    DependsOn: VPCStack
     Type: AWS::CloudFormation::Stack
     Properties:
       TemplateURL:
@@ -289,6 +316,7 @@ Resources:
           - S3Region: !If [UsingDefaultBucket, !Ref 'AWS::Region', !Ref QSS3BucketRegion]
             S3Bucket: !If [UsingDefaultBucket, !Sub '${QSS3BucketName}-${AWS::Region}', !Ref QSS3BucketName]
       Parameters:
+        ADEdition: !Ref 'ADEdition'
         DomainAdminPassword: !Ref 'DomainAdminPassword'
         DomainDNSName: !Ref 'DomainDNSName'
         DomainNetBIOSName: !Ref 'DomainNetBIOSName'
@@ -299,7 +327,6 @@ Resources:
         VPCCIDR: !Ref 'VPCCIDR'
         VPCID: !GetAtt 'VPCStack.Outputs.VPCID'
   Headnode:
-    DependsOn: ADStack
     Type: AWS::CloudFormation::Stack
     Properties:
       TemplateURL:
@@ -319,17 +346,13 @@ Resources:
         DomainNetBIOSName: !Ref 'DomainNetBIOSName'
         KeyPairName: !Ref 'KeyPairName'
         PrivateSubnet1ID: !GetAtt 'VPCStack.Outputs.PrivateSubnet1AID'
-        PrivateSubnet2ID: !GetAtt 'VPCStack.Outputs.PrivateSubnet2AID'
         PublicSubnet1ID: !GetAtt 'VPCStack.Outputs.PublicSubnet1ID'
-        PublicSubnet2ID: !GetAtt 'VPCStack.Outputs.PublicSubnet2ID'
         VPCID: !GetAtt 'VPCStack.Outputs.VPCID'
-        ADServer1PrivateIP: !GetAtt 'ADStack.Outputs.ADServer1PrivateIP'
-        ADServer2PrivateIP: !GetAtt 'ADStack.Outputs.ADServer2PrivateIP'
         MicrosoftAD: !GetAtt 'ADStack.Outputs.MicrosoftAD'
         HeadNodeInstanceType: !Ref 'HeadNodeInstanceType'
         HeadNodeNetBIOSName: !Ref 'HeadNodeNetBIOSName'
+        RemoteAccessCIDR: !Ref 'RemoteAccessCIDR'
   WorkerStack:
-    DependsOn: ADStack
     Type: AWS::CloudFormation::Stack
     Properties:
       TemplateURL:
@@ -341,8 +364,8 @@ Resources:
         WorkerSGID: !GetAtt 'ADStack.Outputs.WorkerSGID'
         KeyPairName: !Ref 'KeyPairName'
         PrivateSubnet1ID: !GetAtt 'VPCStack.Outputs.PrivateSubnet1AID'
-        PrivateSubnet2ID: !GetAtt 'VPCStack.Outputs.PrivateSubnet2AID'
-        VPCID: !GetAtt 'VPCStack.Outputs.VPCID'
+#        PrivateSubnet2ID: !GetAtt 'VPCStack.Outputs.PrivateSubnet2AID'
+#        VPCID: !GetAtt 'VPCStack.Outputs.VPCID'
         ASGName: !Ref 'ASGName'
         HeadNodeNetBIOSName: !Ref 'HeadNodeNetBIOSName'
         DomainDNSName: !Ref 'DomainDNSName'
@@ -351,3 +374,5 @@ Resources:
         HTCoreCount: !Ref 'HTCoreCount'
         ThreadsPerCore: !Ref 'ThreadsPerCore'
         QSS3BucketName: !Ref 'QSS3BucketName'
+        CertS3Bucket: !Ref 'CertS3Bucket'
+        CertS3Key: !Ref 'CertS3Key'

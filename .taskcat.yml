@@ -9,6 +9,8 @@ tests:
   MSFTHPC:
     parameters:
       AvailabilityZones: $[taskcat_getaz_2]
+      CertS3Bucket: 'davmayd2'
+      CertS3Key: mypfx.pfx
       DomainAdminPassword: $[taskcat_genpass_16]
       KeyPairName: $[taskcat_getkeypair]
       QSS3BucketName: $[taskcat_autobucket]

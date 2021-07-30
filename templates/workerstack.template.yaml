@@ -1,46 +1,99 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: Creates MSHPCPACK AUTOSCALING GROUP for HPC WORKER NODES
+Description: Creates MSHPCPACK Auto Scaling group for HPC worker nodes (qs-1s4u7q650)
 Metadata:
+  cfn-lint:
+    config:
+      ignore_checks:
+        - E9101
+        - W9006
   'AWS::CloudFormation::Interface':
     ParameterGroups:
       - Label:
           default: Network Configuration
         Parameters:
-          - ThirdAZ
-          - VPCID
+          #- ThirdAZ
+          #- VPCID
           - PrivateSubnet1ID
-          - PrivateSubnet2ID
-          - PrivateSubnet3ID
+          #- PrivateSubnet2ID
+          #- PrivateSubnet3ID
+          - WorkerSGID
       - Label:
           default: Amazon EC2 Configuration
         Parameters:
+          - WorkerInstanceType
+          - WorkerAMI
           - KeyPairName
+          - ASGName
+          - HeadNodeNetBIOSName
+          #- MasterServerName
       - Label:
-          default: Automation Asset Configuration
+          default: Active directory configuration
         Parameters:
-          - BucketName
+          - DomainDNSName
+          - DomainAdminPassword
+      - Label:
+          default: HPC configuratiopn
+        Parameters:
+          - HTCoreCount
+          - ThreadsPerCore
+      - Label:
+          default: Certificate Configuration
+        Parameters:
+          - CertS3Bucket
+          - CertS3Key
+      - Label:
+          default: Quick Start Configuration
+        Parameters:
+          - QSS3BucketName
     ParameterLabels:
+      HTCoreCount:
+        default: Core count
+      ThreadsPerCore:
+        default: Threads per core
+      HeadNodeNetBIOSName:
+        default: Head node NetBIOS name
+      WorkerSGID:
+        default: Worker node security group ID
+      ASGName:
+        default: Auto scaling group name
+      WorkerAMI:
+        default: Worker AMI
+      WorkerInstanceType:
+        default: Worker instance type
+      CertS3Bucket:
+        default: Certificate S3 bucket
+      CertS3Key:
+        default: Certificate S3 key
       DomainAdminPassword:
         default: Domain Admin Password
-      DomainAdminUser:
-        default: Domain Admin User Name
+      # DomainAdminUser:
+      #   default: Domain Admin User Name
       DomainDNSName:
         default: Domain DNS Name
-      DomainMemberSGID:
-        default: Security Group ID for AD Domain Members
-      DomainNetBIOSName:
-        default: Domain NetBIOS Name
+      # DomainMemberSGID:
+      #   default: Security Group ID for AD Domain Members
+      # DomainNetBIOSName:
+      #   default: Domain NetBIOS Name
       KeyPairName:
         default: Key Pair Name
       PrivateSubnet1ID:
         default: Private Subnet 1 ID
-      PrivateSubnet2ID:
-        default: Private Subnet 2 ID
-      PrivateSubnet3ID:
-        default: Private Subnet 3 ID
-      VPCID:
-        default: VPC ID
+      # PrivateSubnet2ID:
+      #   default: Private Subnet 2 ID
+      QSS3BucketName:
+        default: Quick Start S3 bucket name
+      #PrivateSubnet3ID:
+      #  default: Private Subnet 3 ID
+      #VPCID:
+      #  default: VPC ID
 Parameters:
+  CertS3Bucket:
+    AllowedPattern: '^[0-9a-zA-Z]+([0-9a-zA-Z-]*[0-9a-zA-Z])*$'
+    Description: S3 bucket containing the certificate
+    Type: String
+  CertS3Key:
+    Description: S3 key for the certificate
+    Type: String
   WorkerSGID:
     Description: 'WORKER Security Group '
     Type: 'AWS::EC2::SecurityGroup::Id'
@@ -83,13 +136,13 @@ Parameters:
     Default: '1'
     Description: This disables HYPERTHREADING
     Type: String
-  MasterServerName:
-    AllowedPattern: '[a-zA-Z0-9\-]+'
-    Default: EC2AMAZ-Q5VLDH3
-    Description: Specify the profile MasterServerName
-    MaxLength: '15'
-    MinLength: '1'
-    Type: String
+  # MasterServerName:
+  #   AllowedPattern: '[a-zA-Z0-9\-]+'
+  #   Default: EC2AMAZ-Q5VLDH3
+  #   Description: Specify the profile MasterServerName
+  #   MaxLength: '15'
+  #   MinLength: '1'
+  #   Type: String
   ASGName:
     AllowedPattern: '[a-zA-Z0-9\-]+'
     Default: glink-processor
@@ -100,15 +153,15 @@ Parameters:
   PrivateSubnet1ID:
     Description: 'ID of the private subnet 1 in Availability Zone 1 (e.g., subnet-a0246dcd)'
     Type: 'AWS::EC2::Subnet::Id'
-  PrivateSubnet2ID:
-    Description: 'ID of the private subnet 2 in Availability Zone 2 (e.g., subnet-a0246dcd)'
-    Type: 'AWS::EC2::Subnet::Id'
-  PrivateSubnet3ID:
-    Default: ''
-    Description: >-
-      (Optional) ID of the optional private subnet 3 in Availability Zone 3
-      (e.g., subnet-a0246dcd)
-    Type: String
+  # PrivateSubnet2ID:
+  #   Description: 'ID of the private subnet 2 in Availability Zone 2 (e.g., subnet-a0246dcd)'
+  #   Type: 'AWS::EC2::Subnet::Id'
+  # PrivateSubnet3ID:
+  #   Default: ''
+  #   Description: >-
+  #     (Optional) ID of the optional private subnet 3 in Availability Zone 3
+  #     (e.g., subnet-a0246dcd)
+  #   Type: String
   QSS3BucketName:
     AllowedPattern: '^[0-9a-zA-Z]+([0-9a-zA-Z-]*[0-9a-zA-Z])*$'
     ConstraintDescription: >-
@@ -120,9 +173,9 @@ Parameters:
       include numbers, lowercase letters, uppercase letters, and hyphens (-). It
       cannot start or end with a hyphen (-).
     Type: String
-  VPCID:
-    Description: 'ID of the VPC (e.g., vpc-0343606e)'
-    Type: 'AWS::EC2::VPC::Id'
+  # VPCID:
+  #   Description: 'ID of the VPC (e.g., vpc-0343606e)'
+  #   Type: 'AWS::EC2::VPC::Id'
   WorkerAMI:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: '/aws/service/ami-windows-latest/Windows_Server-2019-English-Full-Base'
@@ -300,7 +353,7 @@ Resources:
               Expand-Archive -Path $location -DestinationPath $installdir
               $cerFileName = "C:\ms-hpcpack2019\myhpc.pfx"
               $bucket = "${QSS3BucketName}"
-              Copy-S3Object -BucketName $bucket -Key mypfx.pfx -LocalFile $cerFileName
+              Copy-S3Object -BucketName "${CertS3Bucket}" -Key "${CertS3Key}" -LocalFile $cerFileName
 
               $HeadNode = "${HeadNodeNetBIOSName}" + "." + "${DomainDNSName}"
               $pw = "${DomainAdminPassword}"
@@ -330,7 +383,7 @@ Resources:
         BlockDeviceMappings:
           - DeviceName: /dev/sdk
             Ebs:
-              VolumeSize: '50'
+              VolumeSize: 50
           - DeviceName: /dev/sdc
             VirtualName: ephemeral0
   PlacementGroup:
@@ -348,7 +401,7 @@ Resources:
       Tags:
         - Key: 'MasterServerName'
           Value: !Ref HeadNodeNetBIOSName
-          PropagateAtLaunch: 'true'
+          PropagateAtLaunch: true
       LaunchTemplate:
         LaunchTemplateName: 'GridHelperLT'
         Version: '1'

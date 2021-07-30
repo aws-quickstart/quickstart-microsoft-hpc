@@ -1,6 +1,10 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Deploys Head Node '
+Description: 'Deploys Head Node (qs-1s4u7q63o)'
 Metadata:
+  cfn-lint:
+    config:
+      ignore_checks:
+        - W9006
   AWS::CloudFormation::Interface:
     ParameterGroups:
       - Label:
@@ -8,9 +12,8 @@ Metadata:
         Parameters:
           - VPCID
           - PrivateSubnet1ID
-          - PrivateSubnet2ID
           - PublicSubnet1ID
-          - PublicSubnet2ID
+          - RemoteAccessCIDR
           - KeyPairName
       - Label:
           default: FSX Storage Configuration
@@ -21,10 +24,9 @@ Metadata:
       - Label:
           default: Microsoft Active Directory Configuration
         Parameters:
+          - MicrosoftAD
           - DomainDNSName
           - DomainNetBIOSName
-          - ADServer1PrivateIP
-          - ADServer2PrivateIP
           - DomainAdminUser
           - DomainAdminPassword
           - DomainMemberSGID
@@ -36,12 +38,33 @@ Metadata:
           - HeadNodeAMI
           - HeadNodeSGID
       - Label:
+          default: Jump Server Configuration
+        Parameters:
+          - JumpServerNetBIOSName
+          - JumpServerAMI
+      - Label:
           default: AWS Quick Start Configuration
         Parameters:
           - QSS3BucketName
           - QSS3BucketRegion
           - QSS3KeyPrefix
     ParameterLabels:
+      HeadNodeInstanceType:
+        default: Head node instance type
+      HeadNodeNetBIOSName:
+        default: Head node NetBIOS name
+      HeadNodeSGID:
+        default: Head node security group
+      JumpServerNetBIOSName:
+        default: Jump server NetBIOS name
+      MicrosoftAD:
+        default: Microsoft AD
+      HeadNodeAMI:
+        default: Head node AMI
+      JumpServerAMI:
+        default: Jump server AMI
+      RemoteAccessCIDR:
+        default: Remote access CIDR
       DomainAdminPassword:
         default: Domain Admin Password
       DomainAdminUser:
@@ -56,16 +79,8 @@ Metadata:
         default: Key Pair Name
       PrivateSubnet1ID:
         default: Private Subnet 1 ID
-      PrivateSubnet2ID:
-        default: Private Subnet 2 ID
       PublicSubnet1ID:
         default: Public Subnet 1 ID
-      PublicSubnet2ID:
-        default: Public Subnet 2 ID
-      ADServer1PrivateIP:
-        default: DNS Server IP
-      ADServer2PrivateIP:
-        default: DNS Server IP
       QSS3BucketName:
         default: Quick Start S3 Bucket Name
       QSS3BucketRegion:
@@ -81,6 +96,10 @@ Metadata:
       ThroughputCapacity:
         default: ThroughputCapacity
 Parameters:
+  RemoteAccessCIDR:
+    Description: Remote access CIDR
+    Default: "0.0.0.0/0"
+    Type: String
   DomainAdminPassword:
     AllowedPattern: (?=^.{6,255}$)((?=.*\d)(?=.*[A-Z])(?=.*[a-z])|(?=.*\d)(?=.*[^A-Za-z0-9])(?=.*[a-z])|(?=.*[^A-Za-z0-9])(?=.*[A-Z])(?=.*[a-z])|(?=.*\d)(?=.*[A-Z])(?=.*[^A-Za-z0-9]))^.*
     Description: Password for the domain admin user. Must be at least 8 characters
@@ -114,14 +133,6 @@ Parameters:
     MaxLength: '15'
     MinLength: '1'
     Type: String
-  ADServer1PrivateIP:
-    Default: 10.0.0.1
-    Description: Specify the DNS Server IP
-    Type: String
-  ADServer2PrivateIP:
-    Default: 10.0.0.2
-    Description: Specify the additional DNS Server IP
-    Type: String
   KeyPairName:
     Description: Public/private key pairs allow you to securely connect to your instance
       after it launches
@@ -129,13 +140,7 @@ Parameters:
   PrivateSubnet1ID:
     Description: ID of the private subnet 1 in Availability Zone 1 (e.g., subnet-a0246dcd)
     Type: AWS::EC2::Subnet::Id
-  PrivateSubnet2ID:
-    Description: ID of the private subnet 2 in Availability Zone 2 (e.g., subnet-a0246dcd)
-    Type: AWS::EC2::Subnet::Id
   PublicSubnet1ID:
-    Description: ID of the private subnet 1 in Availability Zone 1 (e.g., subnet-a0246dcd)
-    Type: AWS::EC2::Subnet::Id
-  PublicSubnet2ID:
     Description: ID of the private subnet 1 in Availability Zone 1 (e.g., subnet-a0246dcd)
     Type: AWS::EC2::Subnet::Id
   QSS3BucketName:
@@ -203,6 +208,7 @@ Parameters:
   HeadNodeAMI:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/ami-windows-latest/Windows_Server-2019-English-Full-SQL_2019_Standard
+    Description: SSM parameter for latest Head Node AMI
   FileSystemName:
     AllowedPattern: '[a-zA-Z0-9\-]+'
     Default: hpcstorage
@@ -232,121 +238,135 @@ Parameters:
     Type: String
 Conditions:
   UsingDefaultBucket: !Equals [!Ref QSS3BucketName, 'aws-quickstart']
-Mappings:
-  AWSAMIRegionMap:
-    AMI:
-      WS2012R2: Windows_Server-2012-R2_RTM-English-64Bit-Base-2018.07.11
-      WS2012R2SQL2014SP2ENT: Windows_Server-2012-R2_RTM-English-64Bit-SQL_2014_SP2_Enterprise-2018.07.11
-      WS2012R2SQL2016SP1ENT: Windows_Server-2012-R2_RTM-English-64Bit-SQL_2016_SP1_Enterprise-2018.07.11
-      WS2016FULLBASE: Windows_Server-2016-English-Full-Base-2018.07.11
-      WS2016FULLSQL2017ENT: Windows_Server-2016-English-Full-SQL_2017_Enterprise-2018.07.11
-    ap-northeast-1:
-      WS2012R2: ami-a73c5e4a
-      WS2012R2SQL2014SP2ENT: ami-020664ef
-      WS2012R2SQL2016SP1ENT: ami-060664eb
-      WS2016FULLBASE: ami-49096ba4
-      WS2016FULLSQL2017ENT: ami-a5197b48
-    ap-northeast-2:
-      WS2012R2: ami-28398d46
-      WS2012R2SQL2014SP2ENT: ami-d5398dbb
-      WS2012R2SQL2016SP1ENT: ami-d12094bf
-      WS2016FULLBASE: ami-07219569
-      WS2016FULLSQL2017ENT: ami-ad2397c3
-    ap-northeast-3:
-      WS2012R2: ami-04474e79
-      WS2012R2SQL2014SP2ENT: ami-1c424b61
-      WS2012R2SQL2016SP1ENT: ami-1e424b63
-      WS2016FULLBASE: ami-88424bf5
-      WS2016FULLSQL2017ENT: ami-fb585186
-    ap-south-1:
-      WS2012R2: ami-e013228f
-      WS2012R2SQL2014SP2ENT: ami-1d2b1a72
-      WS2012R2SQL2016SP1ENT: ami-1355647c
-      WS2016FULLBASE: ami-ae1627c1
-      WS2016FULLSQL2017ENT: ami-ce1627a1
-    ap-southeast-1:
-      WS2012R2: ami-43e49da9
-      WS2012R2SQL2014SP2ENT: ami-37e39add
-      WS2012R2SQL2016SP1ENT: ami-b6e29b5c
-      WS2016FULLBASE: ami-84e79e6e
-      WS2016FULLSQL2017ENT: ami-21dca5cb
-    ap-southeast-2:
-      WS2012R2: ami-e3862381
-      WS2012R2SQL2014SP2ENT: ami-ea852088
-      WS2012R2SQL2016SP1ENT: ami-b68124d4
-      WS2016FULLBASE: ami-d48623b6
-      WS2016FULLSQL2017ENT: ami-5ebf1a3c
-    ca-central-1:
-      WS2012R2: ami-f334b697
-      WS2012R2SQL2014SP2ENT: ami-a43fbdc0
-      WS2012R2SQL2016SP1ENT: ami-4d3ebc29
-      WS2016FULLBASE: ami-303ebc54
-      WS2016FULLSQL2017ENT: ami-6e3fbd0a
-    eu-central-1:
-      WS2012R2: ami-f7ece81c
-      WS2012R2SQL2014SP2ENT: ami-38cfcbd3
-      WS2012R2SQL2016SP1ENT: ami-9be0e470
-      WS2016FULLBASE: ami-6af7f381
-      WS2016FULLSQL2017ENT: ami-c0f3f72b
-    eu-west-1:
-      WS2012R2: ami-5ef8ebb4
-      WS2012R2SQL2014SP2ENT: ami-51f5e6bb
-      WS2012R2SQL2016SP1ENT: ami-52f8ebb8
-      WS2016FULLBASE: ami-96e1f27c
-      WS2016FULLSQL2017ENT: ami-6af5e680
-    eu-west-2:
-      WS2012R2: ami-a3b259c4
-      WS2012R2SQL2014SP2ENT: ami-aeb358c9
-      WS2012R2SQL2016SP1ENT: ami-44b75c23
-      WS2016FULLBASE: ami-9bb358fc
-      WS2016FULLSQL2017ENT: ami-08b55e6f
-    eu-west-3:
-      WS2012R2: ami-e0b1019d
-      WS2012R2SQL2014SP2ENT: ami-e1b1019c
-      WS2012R2SQL2016SP1ENT: ami-85b505f8
-      WS2016FULLBASE: ami-23b6065e
-      WS2016FULLSQL2017ENT: ami-1ab50567
-    sa-east-1:
-      WS2012R2: ami-fac4e396
-      WS2012R2SQL2014SP2ENT: ami-f5c8ef99
-      WS2012R2SQL2016SP1ENT: ami-6ed3f402
-      WS2016FULLBASE: ami-36caed5a
-      WS2016FULLSQL2017ENT: ami-ccc4e3a0
-    us-east-1:
-      WS2012R2: ami-60093e1f
-      WS2012R2SQL2014SP2ENT: ami-0a6b5c75
-      WS2012R2SQL2016SP1ENT: ami-70f9ce0f
-      WS2016FULLBASE: ami-2d360152
-      WS2016FULLSQL2017ENT: ami-b85b6cc7
-    us-east-2:
-      WS2012R2: ami-ca2318af
-      WS2012R2SQL2014SP2ENT: ami-c32c17a6
-      WS2012R2SQL2016SP1ENT: ami-e4231881
-      WS2016FULLBASE: ami-36241f53
-      WS2016FULLSQL2017ENT: ami-a5201bc0
-    us-west-1:
-      WS2012R2: ami-132ac970
-      WS2012R2SQL2014SP2ENT: ami-1b2bc878
-      WS2012R2SQL2016SP1ENT: ami-b52bc8d6
-      WS2016FULLBASE: ami-d12ecdb2
-      WS2016FULLSQL2017ENT: ami-5732d134
-    us-west-2:
-      WS2012R2: ami-490b5831
-      WS2012R2SQL2014SP2ENT: ami-651f4c1d
-      WS2012R2SQL2016SP1ENT: ami-be184bc6
-      WS2016FULLBASE: ami-6d336015
-      WS2016FULLSQL2017ENT: ami-f60f5c8e
-  SQLAMINameMap:
-    '2014':
-      'no': WS2012R2
-      'yes': WS2012R2SQL2014SP2ENT
-    '2016':
-      'no': WS2012R2
-      'yes': WS2012R2SQL2016SP1ENT
-    '2017':
-      'no': WS2016FULLBASE
-      'yes': WS2016FULLSQL2017ENT
+# Mappings:
+#   AWSAMIRegionMap:
+#     AMI:
+#       WS2012R2: Windows_Server-2012-R2_RTM-English-64Bit-Base-2018.07.11
+#       WS2012R2SQL2014SP2ENT: Windows_Server-2012-R2_RTM-English-64Bit-SQL_2014_SP2_Enterprise-2018.07.11
+#       WS2012R2SQL2016SP1ENT: Windows_Server-2012-R2_RTM-English-64Bit-SQL_2016_SP1_Enterprise-2018.07.11
+#       WS2016FULLBASE: Windows_Server-2016-English-Full-Base-2018.07.11
+#       WS2016FULLSQL2017ENT: Windows_Server-2016-English-Full-SQL_2017_Enterprise-2018.07.11
+#     ap-northeast-1:
+#       WS2012R2: ami-a73c5e4a
+#       WS2012R2SQL2014SP2ENT: ami-020664ef
+#       WS2012R2SQL2016SP1ENT: ami-060664eb
+#       WS2016FULLBASE: ami-49096ba4
+#       WS2016FULLSQL2017ENT: ami-a5197b48
+#     ap-northeast-2:
+#       WS2012R2: ami-28398d46
+#       WS2012R2SQL2014SP2ENT: ami-d5398dbb
+#       WS2012R2SQL2016SP1ENT: ami-d12094bf
+#       WS2016FULLBASE: ami-07219569
+#       WS2016FULLSQL2017ENT: ami-ad2397c3
+#     ap-northeast-3:
+#       WS2012R2: ami-04474e79
+#       WS2012R2SQL2014SP2ENT: ami-1c424b61
+#       WS2012R2SQL2016SP1ENT: ami-1e424b63
+#       WS2016FULLBASE: ami-88424bf5
+#       WS2016FULLSQL2017ENT: ami-fb585186
+#     ap-south-1:
+#       WS2012R2: ami-e013228f
+#       WS2012R2SQL2014SP2ENT: ami-1d2b1a72
+#       WS2012R2SQL2016SP1ENT: ami-1355647c
+#       WS2016FULLBASE: ami-ae1627c1
+#       WS2016FULLSQL2017ENT: ami-ce1627a1
+#     ap-southeast-1:
+#       WS2012R2: ami-43e49da9
+#       WS2012R2SQL2014SP2ENT: ami-37e39add
+#       WS2012R2SQL2016SP1ENT: ami-b6e29b5c
+#       WS2016FULLBASE: ami-84e79e6e
+#       WS2016FULLSQL2017ENT: ami-21dca5cb
+#     ap-southeast-2:
+#       WS2012R2: ami-e3862381
+#       WS2012R2SQL2014SP2ENT: ami-ea852088
+#       WS2012R2SQL2016SP1ENT: ami-b68124d4
+#       WS2016FULLBASE: ami-d48623b6
+#       WS2016FULLSQL2017ENT: ami-5ebf1a3c
+#     ca-central-1:
+#       WS2012R2: ami-f334b697
+#       WS2012R2SQL2014SP2ENT: ami-a43fbdc0
+#       WS2012R2SQL2016SP1ENT: ami-4d3ebc29
+#       WS2016FULLBASE: ami-303ebc54
+#       WS2016FULLSQL2017ENT: ami-6e3fbd0a
+#     eu-central-1:
+#       WS2012R2: ami-f7ece81c
+#       WS2012R2SQL2014SP2ENT: ami-38cfcbd3
+#       WS2012R2SQL2016SP1ENT: ami-9be0e470
+#       WS2016FULLBASE: ami-6af7f381
+#       WS2016FULLSQL2017ENT: ami-c0f3f72b
+#     eu-west-1:
+#       WS2012R2: ami-5ef8ebb4
+#       WS2012R2SQL2014SP2ENT: ami-51f5e6bb
+#       WS2012R2SQL2016SP1ENT: ami-52f8ebb8
+#       WS2016FULLBASE: ami-96e1f27c
+#       WS2016FULLSQL2017ENT: ami-6af5e680
+#     eu-west-2:
+#       WS2012R2: ami-a3b259c4
+#       WS2012R2SQL2014SP2ENT: ami-aeb358c9
+#       WS2012R2SQL2016SP1ENT: ami-44b75c23
+#       WS2016FULLBASE: ami-9bb358fc
+#       WS2016FULLSQL2017ENT: ami-08b55e6f
+#     eu-west-3:
+#       WS2012R2: ami-e0b1019d
+#       WS2012R2SQL2014SP2ENT: ami-e1b1019c
+#       WS2012R2SQL2016SP1ENT: ami-85b505f8
+#       WS2016FULLBASE: ami-23b6065e
+#       WS2016FULLSQL2017ENT: ami-1ab50567
+#     sa-east-1:
+#       WS2012R2: ami-fac4e396
+#       WS2012R2SQL2014SP2ENT: ami-f5c8ef99
+#       WS2012R2SQL2016SP1ENT: ami-6ed3f402
+#       WS2016FULLBASE: ami-36caed5a
+#       WS2016FULLSQL2017ENT: ami-ccc4e3a0
+#     us-east-1:
+#       WS2012R2: ami-60093e1f
+#       WS2012R2SQL2014SP2ENT: ami-0a6b5c75
+#       WS2012R2SQL2016SP1ENT: ami-70f9ce0f
+#       WS2016FULLBASE: ami-2d360152
+#       WS2016FULLSQL2017ENT: ami-b85b6cc7
+#     us-east-2:
+#       WS2012R2: ami-ca2318af
+#       WS2012R2SQL2014SP2ENT: ami-c32c17a6
+#       WS2012R2SQL2016SP1ENT: ami-e4231881
+#       WS2016FULLBASE: ami-36241f53
+#       WS2016FULLSQL2017ENT: ami-a5201bc0
+#     us-west-1:
+#       WS2012R2: ami-132ac970
+#       WS2012R2SQL2014SP2ENT: ami-1b2bc878
+#       WS2012R2SQL2016SP1ENT: ami-b52bc8d6
+#       WS2016FULLBASE: ami-d12ecdb2
+#       WS2016FULLSQL2017ENT: ami-5732d134
+#     us-west-2:
+#       WS2012R2: ami-490b5831
+#       WS2012R2SQL2014SP2ENT: ami-651f4c1d
+#       WS2012R2SQL2016SP1ENT: ami-be184bc6
+#       WS2016FULLBASE: ami-6d336015
+#       WS2016FULLSQL2017ENT: ami-f60f5c8e
+#   SQLAMINameMap:
+#     '2014':
+#       'no': WS2012R2
+#       'yes': WS2012R2SQL2014SP2ENT
+#     '2016':
+#       'no': WS2012R2
+#       'yes': WS2012R2SQL2016SP1ENT
+#     '2017':
+#       'no': WS2016FULLBASE
+#       'yes': WS2016FULLSQL2017ENT
 Resources:
+  JumpBoxSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Enables Remote Access to Jump Box
+      VpcId: !Ref VPCID
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3389
+          ToPort: 3389
+          CidrIp: !Ref RemoteAccessCIDR
+        - IpProtocol: icmp
+          FromPort: -1
+          ToPort: -1
+          CidrIp: !Ref RemoteAccessCIDR
   HeadNodeRole:
     Type: AWS::IAM::Role
     Properties:
@@ -598,8 +618,8 @@ Resources:
       IamInstanceProfile: !Ref 'HeadNodeInstanceProfile'
       InstanceType: !Ref 'HeadNodeInstanceType'
       NetworkInterfaces:
-        - DeleteOnTermination: 'true'
-          DeviceIndex: 0
+        - DeleteOnTermination: true
+          DeviceIndex: '0'
           SubnetId: !Ref 'PrivateSubnet1ID'
           GroupSet:
             - !Ref 'DomainMemberSGID'
@@ -610,7 +630,7 @@ Resources:
       BlockDeviceMappings:
         - DeviceName: /dev/sda1
           Ebs:
-            VolumeSize: '100'
+            VolumeSize: 100
             VolumeType: gp2
       KeyName: !Ref 'KeyPairName'
       UserData: !Base64
@@ -767,19 +787,20 @@ Resources:
       IamInstanceProfile: !Ref 'HeadNodeInstanceProfile'
       InstanceType: !Ref 'HeadNodeInstanceType'
       NetworkInterfaces:
-        - DeleteOnTermination: 'true'
-          DeviceIndex: 0
+        - DeleteOnTermination: true
+          DeviceIndex: '0'
           SubnetId: !Ref 'PublicSubnet1ID'
           GroupSet:
             - !Ref 'DomainMemberSGID'
             - !Ref 'HeadNodeSGID'
+            - !Ref 'JumpBoxSecurityGroup'
       Tags:
         - Key: Name
           Value: !Ref 'JumpServerNetBIOSName'
       BlockDeviceMappings:
         - DeviceName: /dev/sda1
           Ebs:
-            VolumeSize: '100'
+            VolumeSize: 100
             VolumeType: gp2
       KeyName: !Ref 'KeyPairName'
       UserData: !Base64
