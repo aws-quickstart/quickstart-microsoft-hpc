@@ -2,4 +2,4 @@
 // Briefly describe the software. Use consistent and clear branding. 
 // Include the benefits of using the software on AWS, and provide details on usage scenarios.
 
-<Describe how the software works on AWS.>
+This Quick Start deploys an HPC head node, used to start new HPC workloads, and an auto scaling group of worker nodes to process the workloads. A jump box is deployed in a public subnet and is used to access the head node from outside the VPC.

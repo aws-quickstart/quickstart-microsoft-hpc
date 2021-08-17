@@ -108,9 +108,11 @@ Parameters:
     AllowedPattern: '^[0-9a-zA-Z]+([0-9a-zA-Z-]*[0-9a-zA-Z])*$'
     Description: S3 bucket containing the certificate
     Type: String
+    Default: aws-quickstart
   CertS3Key:
     Description: S3 key for the certificate
     Type: String
+    Default: quickstart-microsoft-hpc/mypfx.pfx
   RemoteAccessCIDR:
     Description: Remote access CIDR
     Default: "0.0.0.0/0"
