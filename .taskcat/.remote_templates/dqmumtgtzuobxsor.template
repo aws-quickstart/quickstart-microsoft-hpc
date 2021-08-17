@@ -1,0 +1,410 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Creates MSHPCPACK Auto Scaling group for HPC worker nodes (qs-1s4u7q650)
+Metadata:
+  cfn-lint:
+    config:
+      ignore_checks:
+        - E9101
+        - W9006
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+      - Label:
+          default: Network Configuration
+        Parameters:
+          #- ThirdAZ
+          #- VPCID
+          - PrivateSubnet1ID
+          #- PrivateSubnet2ID
+          #- PrivateSubnet3ID
+          - WorkerSGID
+      - Label:
+          default: Amazon EC2 Configuration
+        Parameters:
+          - WorkerInstanceType
+          - WorkerAMI
+          - KeyPairName
+          - ASGName
+          - HeadNodeNetBIOSName
+          #- MasterServerName
+      - Label:
+          default: Active directory configuration
+        Parameters:
+          - DomainDNSName
+          - DomainAdminPassword
+      - Label:
+          default: HPC configuratiopn
+        Parameters:
+          - HTCoreCount
+          - ThreadsPerCore
+      - Label:
+          default: Certificate Configuration
+        Parameters:
+          - CertS3Bucket
+          - CertS3Key
+      - Label:
+          default: Quick Start Configuration
+        Parameters:
+          - QSS3BucketName
+    ParameterLabels:
+      HTCoreCount:
+        default: Core count
+      ThreadsPerCore:
+        default: Threads per core
+      HeadNodeNetBIOSName:
+        default: Head node NetBIOS name
+      WorkerSGID:
+        default: Worker node security group ID
+      ASGName:
+        default: Auto scaling group name
+      WorkerAMI:
+        default: Worker AMI
+      WorkerInstanceType:
+        default: Worker instance type
+      CertS3Bucket:
+        default: Certificate S3 bucket
+      CertS3Key:
+        default: Certificate S3 key
+      DomainAdminPassword:
+        default: Domain Admin Password
+      # DomainAdminUser:
+      #   default: Domain Admin User Name
+      DomainDNSName:
+        default: Domain DNS Name
+      # DomainMemberSGID:
+      #   default: Security Group ID for AD Domain Members
+      # DomainNetBIOSName:
+      #   default: Domain NetBIOS Name
+      KeyPairName:
+        default: Key Pair Name
+      PrivateSubnet1ID:
+        default: Private Subnet 1 ID
+      # PrivateSubnet2ID:
+      #   default: Private Subnet 2 ID
+      QSS3BucketName:
+        default: Quick Start S3 bucket name
+      #PrivateSubnet3ID:
+      #  default: Private Subnet 3 ID
+      #VPCID:
+      #  default: VPC ID
+Parameters:
+  CertS3Bucket:
+    AllowedPattern: '^[0-9a-zA-Z]+([0-9a-zA-Z-]*[0-9a-zA-Z])*$'
+    Description: S3 bucket containing the certificate
+    Type: String
+  CertS3Key:
+    Description: S3 key for the certificate
+    Type: String
+  WorkerSGID:
+    Description: 'WORKER Security Group '
+    Type: 'AWS::EC2::SecurityGroup::Id'
+  HeadNodeNetBIOSName:
+    AllowedPattern: '[a-zA-Z0-9\-]+'
+    Default: GridNode
+    Description: >-
+      NetBIOS name of the domain (up to 15 characters) for users of earlier
+      versions of Windows e.g. EXAMPLE
+    MaxLength: '15'
+    MinLength: '1'
+    Type: String
+  DomainAdminPassword:
+    AllowedPattern: (?=^.{6,255}$)((?=.*\d)(?=.*[A-Z])(?=.*[a-z])|(?=.*\d)(?=.*[^A-Za-z0-9])(?=.*[a-z])|(?=.*[^A-Za-z0-9])(?=.*[A-Z])(?=.*[a-z])|(?=.*\d)(?=.*[A-Z])(?=.*[^A-Za-z0-9]))^.*
+    Description: Password for the domain admin user. Must be at least 8 characters,
+      containing letters, numbers, and symbols.
+    MaxLength: '32'
+    MinLength: '8'
+    NoEcho: 'true'
+    Type: String
+  DomainDNSName:
+    AllowedPattern: '[a-zA-Z0-9\-]+\..+'
+    Default: example.com
+    Description: Fully qualified domain name (FQDN).
+    MaxLength: '255'
+    MinLength: '2'
+    Type: String
+  KeyPairName:
+    Description: >-
+      Public/private key pairs allow you to securely connect to your instance
+      after it launches
+    Type: 'AWS::EC2::KeyPair::KeyName'
+  HTCoreCount:
+    Default: '2'
+    Description: This depends on Instance Type. For example To disable HT for c5d.18xlarge, specify 32.
+    Type: String
+  ThreadsPerCore:
+    AllowedValues:
+      - '1'
+    Default: '1'
+    Description: This disables HYPERTHREADING
+    Type: String
+  # MasterServerName:
+  #   AllowedPattern: '[a-zA-Z0-9\-]+'
+  #   Default: EC2AMAZ-Q5VLDH3
+  #   Description: Specify the profile MasterServerName
+  #   MaxLength: '15'
+  #   MinLength: '1'
+  #   Type: String
+  ASGName:
+    AllowedPattern: '[a-zA-Z0-9\-]+'
+    Default: glink-processor
+    Description: AutoScaling Group Name for Worker Node
+    MaxLength: '15'
+    MinLength: '1'
+    Type: String
+  PrivateSubnet1ID:
+    Description: 'ID of the private subnet 1 in Availability Zone 1 (e.g., subnet-a0246dcd)'
+    Type: 'AWS::EC2::Subnet::Id'
+  # PrivateSubnet2ID:
+  #   Description: 'ID of the private subnet 2 in Availability Zone 2 (e.g., subnet-a0246dcd)'
+  #   Type: 'AWS::EC2::Subnet::Id'
+  # PrivateSubnet3ID:
+  #   Default: ''
+  #   Description: >-
+  #     (Optional) ID of the optional private subnet 3 in Availability Zone 3
+  #     (e.g., subnet-a0246dcd)
+  #   Type: String
+  QSS3BucketName:
+    AllowedPattern: '^[0-9a-zA-Z]+([0-9a-zA-Z-]*[0-9a-zA-Z])*$'
+    ConstraintDescription: >-
+      Quick Start bucket name can include numbers, lowercase letters, uppercase
+      letters, and hyphens (-). It cannot start or end with a hyphen (-).
+    Default: aws-quickstart
+    Description: >-
+      Bucket name to store automation assets. Bucket name can
+      include numbers, lowercase letters, uppercase letters, and hyphens (-). It
+      cannot start or end with a hyphen (-).
+    Type: String
+  # VPCID:
+  #   Description: 'ID of the VPC (e.g., vpc-0343606e)'
+  #   Type: 'AWS::EC2::VPC::Id'
+  WorkerAMI:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: '/aws/service/ami-windows-latest/Windows_Server-2019-English-Full-Base'
+    Description: 'Enter an AMI Id. The default value is Windows Server 2019 Core:
+      /aws/service/ami-windows-latest/Windows_Server-2019-English-Full-Base.'
+  WorkerInstanceType:
+    AllowedValues:
+      - c5d.large
+      - c5d.xlarge
+      - c5d.2xlarge
+      - c5d.4xlarge
+      - c5d.9xlarge
+      - c5d.18xlarge
+    Default: c5d.xlarge
+    Description: Amazon EC2 instance type for Worker NOde
+    Type: String
+Resources:
+  WorkerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                  - ec2.amazonaws.com
+                  - ssm.amazonaws.com
+
+      Policies:
+        - PolicyName: WorkerTaggingPolicy
+          PolicyDocument:
+            Statement:
+              - Effect: 'Allow'
+                Action:
+                  - 'ec2:CreateTags'
+                  - 'ec2:DeleteTags'
+                  - 'ec2:DescribeTags'
+                  - 'ec2:Describe*'
+                  - 'ssm:*'
+                  - 's3:*'
+                Resource: '*'
+  WorkerInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref 'WorkerRole'
+  LaunchConfig:
+    Type: "AWS::EC2::LaunchTemplate"
+    Properties:
+      LaunchTemplateName: GridHelperLT
+      LaunchTemplateData:
+        ImageId: !Ref WorkerAMI
+        InstanceType: !Ref WorkerInstanceType
+        KeyName: !Ref KeyPairName
+        TagSpecifications:
+          - ResourceType: "instance"
+            Tags:
+              - Key: "MasterServerName"
+                Value: !Ref HeadNodeNetBIOSName
+        SecurityGroupIds:
+          -  !Ref WorkerSGID
+        IamInstanceProfile:
+          Arn: !GetAtt WorkerInstanceProfile.Arn
+        CpuOptions:
+          CoreCount: !Ref HTCoreCount
+          ThreadsPerCore: !Ref ThreadsPerCore
+        UserData:
+          'Fn::Base64': !Sub |
+              <powershell>
+              function ConvertTo-HexIP {
+              <#
+              .Synopsis
+              Converts a dotted decimal IP address into a hexadecimal string.
+              .Description
+              ConvertTo-HexIP takes a dotted decimal IP and returns a single hexadecimal string value.
+              .Parameter IPAddress
+              An IP Address to convert.
+              #>
+
+              [CmdLetBinding()]
+              param(
+              [Parameter(Mandatory = $true, Position = 0, ValueFromPipeline = $true)]
+              [Net.IPAddress]$IPAddress
+              )
+
+              process {
+              "$($IPAddress.GetAddressBytes() | ForEach-Object { '{0:x2}' -f $_ })" -Replace 's'
+              }
+              }
+
+              $instanceId = (Invoke-RestMethod -Method Get -Uri http://169.254.169.254/latest/meta-data/instance-id)
+              $hostIP = (Invoke-RestMethod -Method Get -Uri http://169.254.169.254/latest/meta-data/local-ipv4)
+              $hostName =  ConvertTo-HexIP($hostIP)
+              $hostName = "ip-" + $hostName -replace('\s','')
+              $tags = Get-EC2Tag | Where-Object {$_.ResourceId -eq $instanceId -and $_.Key -eq "MasterServerName"}
+              $masterName = $tags.Value
+              $retryCount = 4
+              $retryDelay = 60
+              $selfTestPassed = 1
+
+              ######## Self Test 1 - Ping Headnode and HPC APP Service #########
+
+              $test1Passed = $false
+              $test1RetryCount = 0
+
+              while($test1Passed -eq $false -and $test1RetryCount -lt $retryCount)
+              {
+              $test1Result = Test-NetConnection -ComputerName $masterName 
+
+              if($test1Result.PingSucceeded -eq $true)
+              {
+              $test1Passed = $true
+              }
+              else
+              {
+              Start-Sleep -Seconds $retryDelay
+              $test1RetryCount = $test1RetryCount + 1
+              }
+              }
+
+              ####### Self Test 2 - Test Head Node Service Running #########
+              $test2Passed = $false
+              if($test1Passed -eq $true)
+              {
+              $GLService = Get-Service -Name Dhcp
+
+              if($GLService.Status -ne 'Running')
+              {
+
+              Start-Service -Name Dhcp
+              $GLService = Get-Service -Name Dhcp
+              }
+              if($GLService.Status -eq 'Running')
+              {
+              $test2Passed = $true
+              }
+              }
+
+              ######### Action Based on Tests ####################
+              New-EC2Tag -Resource $instanceId -Tag @{Key="Name"; Value="$HostName"}
+              New-EC2Tag -Resource $instanceId -Tag @{Key="Octank_InFarm"; Value="pass"}
+
+              if($test1Passed -eq $true -and $test2Passed -eq $true)
+              {
+              New-EC2Tag -Resource $instanceId -Tag @{Key="Octank_PassedTest"; Value="Pass"}
+              }
+              else
+              {
+              New-EC2Tag -Resource $instanceId -Tag @{Key="Octank_PassedTest"; Value="Fail"}
+              Set-ASInstanceHealth -InstanceId $instanceId -HealthStatus "Unhealthy"
+              }
+              #####  MSHPCPACK Install #############
+              Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+              Write-Host "Disabling Windows Firewall"
+              Get-NetFirewallProfile | Set-NetFirewallProfile -Enabled False
+              
+              Write-Host "Disabling IE Enhanced Security Configuration (ESC)..."
+              $AdminKey = "HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A7-37EF-4b3f-8CFC-4F3A74704073}"
+              $UserKey = "HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A8-37EF-4b3f-8CFC-4F3A74704073}"
+              Set-ItemProperty -Path $AdminKey -Name "IsInstalled" -Value 0
+              Set-ItemProperty -Path $UserKey -Name "IsInstalled" -Value 0
+              
+              Write-Host "Download HPCPACK Software"
+              Write-Host "Creating Directory for HPC PACK 2019 Public Cert"
+              New-Item -Path C:\ms-hpcpack2019\ -ItemType directory -Force
+              $url = "https://download.microsoft.com/download/c/e/b/ceb6122c-1006-44f8-99b1-1792f928f155/HPC%20Pack%202019.zip"
+              $location = "C:\ms-hpcpack2019\HPCPack2019.zip"
+              $wc = New-Object net.webclient
+              $wc.Downloadfile($url,$location)
+              $installdir = "C:\install"
+              Set-ExecutionPolicy Bypass -Scope Process -Force;
+              Expand-Archive -Path $location -DestinationPath $installdir
+              $cerFileName = "C:\ms-hpcpack2019\myhpc.pfx"
+              $bucket = "${QSS3BucketName}"
+              Copy-S3Object -BucketName "${CertS3Bucket}" -Key "${CertS3Key}" -LocalFile $cerFileName
+
+              $HeadNode = "${HeadNodeNetBIOSName}" + "." + "${DomainDNSName}"
+              $pw = "${DomainAdminPassword}"
+              $Admin=[adsi]("WinNT://$env:COMPUTERNAME/Administrator, user")
+              $Admin.SetPassword($pw)
+
+              $setupArg = "-unattend -ComputeNode:$HeadNode -SSLPfxFilePath:$cerFileName -SSLPfxFilePassword:$pw"
+
+              $p = Start-Process -FilePath "$installdir\setup.exe" -ArgumentList $setupArg -PassThru -Wait
+              $p
+              ## Bring node online
+              Start-Sleep -s 60  
+              Add-PSSnapIn Microsoft.HPC -ErrorAction SilentlyContinue
+
+              # This node will be a compute node
+              Assign-HpcNodeTemplate -NodeName $env:COMPUTERNAME -Name "NonDomain ComputeNode Template" -Confirm:$false
+
+              # Only use physical cores, and leave the OS assign the processes on the machine
+              #$cores = (Get-WmiObject Win32_Processor | Measure-Object -Property NumberOfCores -Sum | Select-Object -ExpandProperty Sum)
+              #Set-HpcNode -Name $env:COMPUTERNAME -SubscribedCores $cores -Affinity:$false
+
+              # Bring the node online
+              Set-HpcNodeState -Name $env:COMPUTERNAME -State online
+              #######end ###########
+              </powershell>
+              <persist>true</persist>
+        BlockDeviceMappings:
+          - DeviceName: /dev/sdk
+            Ebs:
+              VolumeSize: 50
+          - DeviceName: /dev/sdc
+            VirtualName: ephemeral0
+  PlacementGroup:
+    Type: AWS::EC2::PlacementGroup
+    Properties:
+      Strategy: cluster
+  AutoScalingGroup:
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    DependsOn:
+      - LaunchConfig
+    Properties:
+      AutoScalingGroupName: !Ref ASGName
+      VPCZoneIdentifier:
+        - !Ref 'PrivateSubnet1ID'
+      Tags:
+        - Key: 'MasterServerName'
+          Value: !Ref HeadNodeNetBIOSName
+          PropagateAtLaunch: true
+      LaunchTemplate:
+        LaunchTemplateName: 'GridHelperLT'
+        Version: '1'
+      MinSize: '0'
+      MaxSize: '0'
+      PlacementGroup: !Ref PlacementGroup
