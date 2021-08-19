@@ -2,12 +2,14 @@
 .Network Configuration
 [width="100%",cols="16%,11%,73%",options="header",]
 |===
-|Parameter label (name) |Default value|Description|Availability Zones
-(`AvailabilityZones`)|`us-east-1a,us-east-1c`|Please Choose AZ that supports AWS Workspace and Microsoft AD Integration.For example US-EAST-1 supports zone id use1-az2,use1-az4,use1-az6 |VPC CIDR
-(`VPCCIDR`)|`10.0.0.0/16`|CIDR Block for the VPC|**NO_LABEL**
-(`PublicSubnet1CIDR`)|`10.0.1.0/24`|CIDR Block for the public DMZ subnet  located in Availability Zone 1|**NO_LABEL**
-(`PublicSubnet2CIDR`)|`10.0.3.0/24`|CIDR Block for the public DMZ subnet  located in Availability Zone 2|Private Subnet 1 CIDR
-(`PrivateSubnet1CIDR`)|`10.0.2.0/24`|CIDR Block for private subnet 1 located in Availability Zone 1.|Private Subnet 2 CIDR
+|Parameter label (name) |Default value|Description|VPC ID
+(`VPCID`)|`**__Requires input__**`|ID of the VPC (e.g., vpc-0343606e)|VPC CIDR
+(`VPCCIDR`)|`10.0.0.0/16`|CIDR Block for the VPC|Subnet 1 ID
+(`PublicSubnet1ID`)|`**__Requires input__**`|ID of subnet 1 in Availability Zone 1 (e.g., subnet-a0246dcd)|Public Subnet 1 CIDR
+(`PublicSubnet1CIDR`)|`10.0.1.0/24`|CIDR Block for the public DMZ subnet  located in Availability Zone 1|Subnet 1 ID
+(`PrivateSubnet1ID`)|`**__Requires input__**`|ID of subnet 1 in Availability Zone 1 (e.g., subnet-a0246dcd)|Private Subnet 1 CIDR
+(`PrivateSubnet1CIDR`)|`10.0.2.0/24`|CIDR Block for private subnet 1 located in Availability Zone 1.|Subnet 2 ID
+(`PrivateSubnet2ID`)|`**__Requires input__**`|ID of subnet 2 in Availability Zone 2 (e.g., subnet-a0246dcd)|Private Subnet 2 CIDR
 (`PrivateSubnet2CIDR`)|`10.0.4.0/24`|CIDR Block for private subnet 2 located in Availability Zone 2.|Remote access CIDR
 (`RemoteAccessCIDR`)|`0.0.0.0/0`|Remote access CIDR
 |===

@@ -9,11 +9,7 @@ param(
 
     [Parameter(Mandatory=$true)]
     [string]
-    $DomainAdminUser,
-
-    [Parameter(Mandatory=$true)]
-    [string]
-    $DomainAdminPassword,
+    $ADUserSecrets,
 
     [Parameter(Mandatory=$true)]
     [string]
@@ -25,6 +21,8 @@ param(
 
 )
 Start-Transcript -Path C:\cfn\log\ConfigHeadNode.ps1.txt -Append
+$Admin = ConvertFrom-Json -InputObject (Get-SECSecretValue -SecretId $ADUserSecrets).SecretString
+$DomainAdminUser = 'Domain\User' -replace 'Domain',$DomainNetBIOSName -replace 'User',$Admin.username
 $SSLThumbprint = (get-childitem -path cert:\LocalMachine\root | where { $_.subject -eq "CN=mshpcpack-2019" }).Thumbprint
 $ClusterName = $env:COMPUTERNAME
 $ServerInstance = $env:COMPUTERNAME
@@ -47,7 +45,7 @@ $cerFileName = "C:\ms-hpcpack2019\myhpc.pfx"
 $bucket = "${CertS3Bucket}"
 $key = "${CertS3Key}"
 Copy-S3Object -BucketName $bucket -Key $key -LocalFile $cerFileName
-$pw = "${DomainAdminPassword}"
+$pw = $Admin.password
 
 ##Setupdatabase
 Set-ExecutionPolicy Bypass -Scope Process -Force;
