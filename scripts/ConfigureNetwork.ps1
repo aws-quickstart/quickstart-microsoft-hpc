@@ -3,15 +3,19 @@ param(
     
     [Parameter(Mandatory=$true)]
     [string]
-    $DomainAdminUser,
+    $ADUserSecrets,
+
     [Parameter(Mandatory=$true)]
     [string]
-    $DomainAdminPassword
+    $DomainNetBIOSName
 
 )
 Start-Transcript -Path C:\cfn\log\ConfigureNetwork.ps1.txt -Append
 Start-Sleep -s 60
-$pass = $DomainAdminPassword
+
+$Admin = ConvertFrom-Json -InputObject (Get-SECSecretValue -SecretId $ADUserSecrets).SecretString
+$DomainAdminUser = $DomainNetBIOSName + "\" + $Admin.username
+$pass = $Admin.password
 # Creating Credential Object for Administrator
 $Credentials = (New-Object PSCredential($DomainAdminUser,(ConvertTo-SecureString $pass -AsPlainText -Force)))
 

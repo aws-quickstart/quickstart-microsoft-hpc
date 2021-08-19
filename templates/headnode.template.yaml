@@ -27,8 +27,7 @@ Metadata:
           - MicrosoftAD
           - DomainDNSName
           - DomainNetBIOSName
-          - DomainAdminUser
-          - DomainAdminPassword
+          - ADUserSecrets
           - DomainMemberSGID
       - Label:
           default: Head Node Configuration
@@ -74,10 +73,8 @@ Metadata:
         default: Jump server AMI
       RemoteAccessCIDR:
         default: Remote access CIDR
-      DomainAdminPassword:
-        default: Domain Admin Password
-      DomainAdminUser:
-        default: Domain Admin User Name
+      ADUserSecrets:
+        default: Domain Admin secret
       DomainDNSName:
         default: Domain DNS Name
       DomainMemberSGID:
@@ -116,20 +113,8 @@ Parameters:
     Description: Remote access CIDR
     Default: "0.0.0.0/0"
     Type: String
-  DomainAdminPassword:
-    AllowedPattern: (?=^.{6,255}$)((?=.*\d)(?=.*[A-Z])(?=.*[a-z])|(?=.*\d)(?=.*[^A-Za-z0-9])(?=.*[a-z])|(?=.*[^A-Za-z0-9])(?=.*[A-Z])(?=.*[a-z])|(?=.*\d)(?=.*[A-Z])(?=.*[^A-Za-z0-9]))^.*
-    Description: Password for the domain admin user. Must be at least 8 characters
-      containing letters, numbers and symbols
-    MaxLength: '32'
-    MinLength: '8'
-    NoEcho: 'true'
-    Type: String
-  DomainAdminUser:
-    Default: admin
-    Description: User name for the account that will be used as Domain Administrator.
-      This is separate from the default "Administrator" account
-    MaxLength: '25'
-    MinLength: '5'
+  ADUserSecrets:
+    Description: Domain admin secret
     Type: String
   DomainDNSName:
     AllowedPattern: '[a-zA-Z0-9\-]+\..+'
@@ -398,6 +383,16 @@ Resources:
               - sts:AssumeRole
       Path: /
       Policies:
+        - PolicyName: QS-Secrets
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:DescribeSecret
+                Resource: 
+                  - !Ref 'ADUserSecrets'
         - PolicyName: root
           PolicyDocument:
             Version: '2012-10-17'
@@ -571,24 +566,15 @@ Resources:
                 - - powershell.exe -Command "C:\cfn\scripts\Join-Domain.ps1 -DomainName
                     '
                   - !Ref 'DomainDNSName'
-                  - ''' -UserName '''
-                  - !Ref 'DomainAdminUser'
-                  - ''' -Password '''
-                  - !Ref 'DomainAdminPassword'
+                  - ''' -ADUserSecrets '''
+                  - !Ref 'ADUserSecrets'
                   - '''"'
               waitAfterCompletion: forever
             c-enable-credssp:
-              command: powershell.exe -ExecutionPolicy RemoteSigned -Command "C:\cfn\scripts\Enable-CredSSP.ps1
+              command: powershell.exe -ExecutionPolicy RemoteSigned -Command "C:\cfn\scripts\Enable-CredSSP.ps1"
               waitAfterCompletion: '0'
             d-add-domadmin-user-to-group:
-              command: !Join
-                - ''
-                - - 'powershell.exe '
-                  - '-ExecutionPolicy RemoteSigned '
-                  - -Command "
-                  - ' C:\cfn\scripts\AddUserToGroup.ps1 -UserName '''
-                  - !Ref 'DomainAdminUser'
-                  - ''' -GroupName ''Administrators''"'
+              command: powershell.exe -ExecutionPolicy RemoteSigned -Command "C:\cfn\scripts\AddUserToGroup.ps1 -UserName Admin -GroupName Administrators"
               waitAfterCompletion: '0'
             e-PrepareNode:
               command: powershell.exe -ExecutionPolicy RemoteSigned -Command "C:\cfn\scripts\PrepareNode.ps1"
@@ -599,10 +585,8 @@ Resources:
                 - - powershell.exe -ExecutionPolicy RemoteSigned -Command "C:\cfn\scripts\ConfigHeadNode.ps1  -DomainNetBIOSName
                     '
                   - !Ref 'DomainNetBIOSName'
-                  - ''' -DomainAdminUser '''
-                  - !Ref 'DomainAdminUser'
-                  - ''' -DomainAdminPassword '''
-                  - !Ref 'DomainAdminPassword'
+                  - ''' -ADUserSecrets '''
+                  - !Ref 'ADUserSecrets'
                   - ''' -CertS3Bucket '''
                   - !Ref 'CertS3Bucket'
                   - ''' -CertS3Key '''
@@ -615,10 +599,10 @@ Resources:
                 - - 'powershell.exe '
                   - '-ExecutionPolicy RemoteSigned '
                   - -Command "
-                  - ' C:\cfn\scripts\ConfigureNetwork.ps1 -DomainAdminPassword '''
-                  - !Ref 'DomainAdminPassword'
-                  - ''' -DomainAdminUser '''
-                  - !Ref 'DomainAdminUser'
+                  - ' C:\cfn\scripts\ConfigureNetwork.ps1 -ADUserSecrets '''
+                  - !Ref 'ADUserSecrets'
+                  - ''' -DomainNetBIOSName '''
+                  - !Ref 'DomainNetBIOSName'
                   - '''"'
               waitAfterCompletion: '0'
         Cleanup:
@@ -758,24 +742,15 @@ Resources:
                 - - powershell.exe -Command "C:\cfn\scripts\Join-Domain.ps1 -DomainName
                     '
                   - !Ref 'DomainDNSName'
-                  - ''' -UserName '''
-                  - !Ref 'DomainAdminUser'
-                  - ''' -Password '''
-                  - !Ref 'DomainAdminPassword'
+                  - ''' -ADUserSecrets '''
+                  - !Ref 'ADUserSecrets'
                   - '''"'
               waitAfterCompletion: forever
             b-enable-credssp:
               command: powershell.exe -ExecutionPolicy RemoteSigned -Command "C:\cfn\scripts\Enable-CredSSP.ps1
               waitAfterCompletion: '0'
             c-add-domadmin-user-to-group:
-              command: !Join
-                - ''
-                - - 'powershell.exe '
-                  - '-ExecutionPolicy RemoteSigned '
-                  - -Command "
-                  - ' C:\cfn\scripts\AddUserToGroup.ps1 -UserName '''
-                  - !Ref 'DomainAdminUser'
-                  - ''' -GroupName ''Administrators''"'
+              command: powershell.exe -ExecutionPolicy RemoteSigned -Command "C:\cfn\scripts\AddUserToGroup.ps1 -UserName Admin -GroupName Administrators"
               waitAfterCompletion: '0'
             d-PrepareNode:
               command: powershell.exe -ExecutionPolicy RemoteSigned -Command "C:\cfn\scripts\PrepareNode.ps1"
@@ -783,9 +758,9 @@ Resources:
             f-ConfigureJumpbox:
               command: !Join
                 - ''
-                - - powershell.exe -ExecutionPolicy RemoteSigned -Command "C:\cfn\scripts\ConfigJumpBox.ps1  -DomainAdminPassword
+                - - powershell.exe -ExecutionPolicy RemoteSigned -Command "C:\cfn\scripts\ConfigJumpBox.ps1  -ADUserSecrets
                     '
-                  - !Ref 'DomainAdminPassword'
+                  - !Ref 'ADUserSecrets'
                   - ''' -CertS3Bucket '''
                   - !Ref 'CertS3Bucket'
                   - ''' -CertS3Key '''

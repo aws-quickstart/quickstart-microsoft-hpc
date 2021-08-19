@@ -30,7 +30,7 @@ Metadata:
           default: Active directory configuration
         Parameters:
           - DomainDNSName
-          - DomainAdminPassword
+          - ADUserSecrets
       - Label:
           default: HPC configuratiopn
         Parameters:
@@ -64,10 +64,8 @@ Metadata:
         default: Certificate S3 bucket
       CertS3Key:
         default: Certificate S3 key
-      DomainAdminPassword:
-        default: Domain Admin Password
-      # DomainAdminUser:
-      #   default: Domain Admin User Name
+      ADUserSecrets:
+        default: Domain Admin secret
       DomainDNSName:
         default: Domain DNS Name
       # DomainMemberSGID:
@@ -106,13 +104,8 @@ Parameters:
     MaxLength: '15'
     MinLength: '1'
     Type: String
-  DomainAdminPassword:
-    AllowedPattern: (?=^.{6,255}$)((?=.*\d)(?=.*[A-Z])(?=.*[a-z])|(?=.*\d)(?=.*[^A-Za-z0-9])(?=.*[a-z])|(?=.*[^A-Za-z0-9])(?=.*[A-Z])(?=.*[a-z])|(?=.*\d)(?=.*[A-Z])(?=.*[^A-Za-z0-9]))^.*
-    Description: Password for the domain admin user. Must be at least 8 characters,
-      containing letters, numbers, and symbols.
-    MaxLength: '32'
-    MinLength: '8'
-    NoEcho: 'true'
+  ADUserSecrets:
+    Description: Domain Admin secret
     Type: String
   DomainDNSName:
     AllowedPattern: '[a-zA-Z0-9\-]+\..+'
@@ -207,6 +200,16 @@ Resources:
                   - ssm.amazonaws.com
 
       Policies:
+        - PolicyName: QS-Secrets
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:DescribeSecret
+                Resource: 
+                  - !Ref 'ADUserSecrets'
         - PolicyName: WorkerTaggingPolicy
           PolicyDocument:
             Statement:
@@ -334,6 +337,9 @@ Resources:
               Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
               Write-Host "Disabling Windows Firewall"
               Get-NetFirewallProfile | Set-NetFirewallProfile -Enabled False
+
+              $Admin = ConvertFrom-Json -InputObject (Get-SECSecretValue -SecretId "${ADUserSecrets}").SecretString
+              $DomainAdminPassword = $Admin.password
               
               Write-Host "Disabling IE Enhanced Security Configuration (ESC)..."
               $AdminKey = "HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A7-37EF-4b3f-8CFC-4F3A74704073}"
@@ -356,7 +362,7 @@ Resources:
               Copy-S3Object -BucketName "${CertS3Bucket}" -Key "${CertS3Key}" -LocalFile $cerFileName
 
               $HeadNode = "${HeadNodeNetBIOSName}" + "." + "${DomainDNSName}"
-              $pw = "${DomainAdminPassword}"
+              $pw = $DomainAdminPassword
               $Admin=[adsi]("WinNT://$env:COMPUTERNAME/Administrator, user")
               $Admin.SetPassword($pw)
 

@@ -4,16 +4,16 @@ param(
     $DomainName,
 
     [string]
-    $UserName,
-
-    [string]
-    $Password
+    $ADUserSecrets
 )
 
 try {
     $ErrorActionPreference = "Stop"
 
-    $pass = ConvertTo-SecureString $Password -AsPlainText -Force
+    $Admin = ConvertFrom-Json -InputObject (Get-SECSecretValue -SecretId $ADUserSecrets).SecretString
+
+    $UserName = $DomainName + "\" + $Admin.username
+    $pass = ConvertTo-SecureString $Admin.password -AsPlainText -Force
     $cred = New-Object System.Management.Automation.PSCredential -ArgumentList $UserName,$pass
 
     Add-Computer -DomainName $DomainName -Credential $cred -ErrorAction Stop
