@@ -9,117 +9,13 @@ Metadata:
   'AWS::CloudFormation::Interface':
     ParameterGroups:
       - Label:
-          default: Network Configuration
-        Parameters:
-          #- ThirdAZ
-          #- VPCID
-          - PrivateSubnet1ID
-          #- PrivateSubnet2ID
-          #- PrivateSubnet3ID
-          - WorkerSGID
-      - Label:
-          default: Amazon EC2 Configuration
-        Parameters:
-          - WorkerInstanceType
-          - WorkerAMI
-          - KeyPairName
-          - ASGName
-          - HeadNodeNetBIOSName
-          #- MasterServerName
-      - Label:
-          default: Active directory configuration
-        Parameters:
-          - DomainDNSName
-          - ADUserSecrets
-      - Label:
-          default: HPC configuratiopn
-        Parameters:
-          - HTCoreCount
-          - ThreadsPerCore
-      - Label:
-          default: Certificate Configuration
-        Parameters:
-          - CertS3Bucket
-          - CertS3Key
-      - Label:
           default: Quick Start Configuration
         Parameters:
           - QSS3BucketName
     ParameterLabels:
-      HTCoreCount:
-        default: Core count
-      ThreadsPerCore:
-        default: Threads per core
-      HeadNodeNetBIOSName:
-        default: Head node NetBIOS name
-      WorkerSGID:
-        default: Worker node security group ID
-      ASGName:
-        default: Auto scaling group name
-      WorkerAMI:
-        default: Worker AMI
-      WorkerInstanceType:
-        default: Worker instance type
-      CertS3Bucket:
-        default: Certificate S3 bucket
-      CertS3Key:
-        default: Certificate S3 key
-      ADUserSecrets:
-        default: Domain Admin secret
-      DomainDNSName:
-        default: Domain DNS Name
-      # DomainMemberSGID:
-      #   default: Security Group ID for AD Domain Members
-      # DomainNetBIOSName:
-      #   default: Domain NetBIOS Name
-      KeyPairName:
-        default: Key Pair Name
-      PrivateSubnet1ID:
-        default: Private Subnet 1 ID
-      # PrivateSubnet2ID:
-      #   default: Private Subnet 2 ID
       QSS3BucketName:
         default: Quick Start S3 bucket name
-      #PrivateSubnet3ID:
-      #  default: Private Subnet 3 ID
-      #VPCID:
-      #  default: VPC IDs
 Resources:
-  CWRole:
-    Type: AWS::IAM::Role
-    Properties:
-      Path: /
-      AssumeRolePolicyDocument:
-        Statement:
-          - Action: sts:AssumeRole
-            Effect: Allow
-            Principal:
-              Service:
-                  - ec2.amazonaws.com
-                  - ssm.amazonaws.com
-
-      Policies:
-        - PolicyName: QS-Secrets
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - secretsmanager:GetSecretValue
-                  - secretsmanager:DescribeSecret
-                Resource: '*'
-        - PolicyName: WorkerTaggingPolicy
-          PolicyDocument:
-            Statement:
-              - Effect: 'Allow'
-                Action:
-                  - 'ec2:CreateTags'
-                  - 'ec2:DeleteTags'
-                  - 'ec2:DescribeTags'
-                  - 'ec2:Describe*'
-                  - 'ssm:*'
-                  - 's3:*'
-                Resource: '*'
   CWMetrics:
     Type: AWS::SSM::Document
     Properties:
