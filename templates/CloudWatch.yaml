@@ -1,0 +1,202 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Creates CloudWatch Metrics on HeadNode to monitor HPC Jobs(qs-1s4u7q650)
+Metadata:
+  cfn-lint:
+    config:
+      ignore_checks:
+        - E9101
+        - W9006
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+      - Label:
+          default: Network Configuration
+        Parameters:
+          #- ThirdAZ
+          #- VPCID
+          - PrivateSubnet1ID
+          #- PrivateSubnet2ID
+          #- PrivateSubnet3ID
+          - WorkerSGID
+      - Label:
+          default: Amazon EC2 Configuration
+        Parameters:
+          - WorkerInstanceType
+          - WorkerAMI
+          - KeyPairName
+          - ASGName
+          - HeadNodeNetBIOSName
+          #- MasterServerName
+      - Label:
+          default: Active directory configuration
+        Parameters:
+          - DomainDNSName
+          - ADUserSecrets
+      - Label:
+          default: HPC configuratiopn
+        Parameters:
+          - HTCoreCount
+          - ThreadsPerCore
+      - Label:
+          default: Certificate Configuration
+        Parameters:
+          - CertS3Bucket
+          - CertS3Key
+      - Label:
+          default: Quick Start Configuration
+        Parameters:
+          - QSS3BucketName
+    ParameterLabels:
+      HTCoreCount:
+        default: Core count
+      ThreadsPerCore:
+        default: Threads per core
+      HeadNodeNetBIOSName:
+        default: Head node NetBIOS name
+      WorkerSGID:
+        default: Worker node security group ID
+      ASGName:
+        default: Auto scaling group name
+      WorkerAMI:
+        default: Worker AMI
+      WorkerInstanceType:
+        default: Worker instance type
+      CertS3Bucket:
+        default: Certificate S3 bucket
+      CertS3Key:
+        default: Certificate S3 key
+      ADUserSecrets:
+        default: Domain Admin secret
+      DomainDNSName:
+        default: Domain DNS Name
+      # DomainMemberSGID:
+      #   default: Security Group ID for AD Domain Members
+      # DomainNetBIOSName:
+      #   default: Domain NetBIOS Name
+      KeyPairName:
+        default: Key Pair Name
+      PrivateSubnet1ID:
+        default: Private Subnet 1 ID
+      # PrivateSubnet2ID:
+      #   default: Private Subnet 2 ID
+      QSS3BucketName:
+        default: Quick Start S3 bucket name
+      #PrivateSubnet3ID:
+      #  default: Private Subnet 3 ID
+      #VPCID:
+      #  default: VPC IDs
+Resources:
+  CWRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                  - ec2.amazonaws.com
+                  - ssm.amazonaws.com
+
+      Policies:
+        - PolicyName: QS-Secrets
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:DescribeSecret
+                Resource: '*'
+        - PolicyName: WorkerTaggingPolicy
+          PolicyDocument:
+            Statement:
+              - Effect: 'Allow'
+                Action:
+                  - 'ec2:CreateTags'
+                  - 'ec2:DeleteTags'
+                  - 'ec2:DescribeTags'
+                  - 'ec2:Describe*'
+                  - 'ssm:*'
+                  - 's3:*'
+                Resource: '*'
+  CWMetrics:
+    Type: AWS::SSM::Document
+    Properties:
+      DocumentType: Automation
+      Content: 
+        schemaVersion: "0.3"
+        description: "Configure CloudWatch Metrics on HeadNode"
+        assumeRole: "{{AutomationAssumeRole}}"
+        parameters:
+          InstanceId:
+            description: "ID of the instance."
+            type: "String"
+          AutomationAssumeRole:
+            default: ""
+            description: "(Optional) The ARN of the role that allows automation to perform actions on your behalf."
+            type: "String"   
+        mainSteps:
+          - name: "ConfigureCWMetrics"
+            action: aws:runCommand
+            inputs:
+              DocumentName: AWS-RunPowerShellScript
+              InstanceIds: 
+                - "{{InstanceId}}"
+              CloudWatchOutputConfig:
+                CloudWatchOutputEnabled: "true"
+                CloudWatchLogGroupName: !Sub '/aws/Quick_Start/${AWS::StackName}'
+              Parameters:
+                commands: 
+                  - |
+                    Write-Output 'Creating and Publish CloudWatch Metrics'
+                    if ( (Get-Command –PSSnapin Microsoft.HPC -ErrorAction SilentlyContinue) -eq $null )
+                    {
+                        Add-PsSnapin Microsoft.HPC
+                    }
+
+                    Import-Module AWSPowerShell
+
+                    $jobs = (Get-HpcJob -State Queued, Running -ErrorAction SilentlyContinue)
+                    $tasks = ($jobs | Get-HpcTask -State Running, Queued -ErrorAction SilentlyContinue)
+                    $nodes = (Get-HpcNode -GroupName ComputeNodes -State Online -HealthState OK)
+
+                    $qjobs = (Get-HpcJob -State Queued -ErrorAction SilentlyContinue)
+                    $qtasks = (Get-HpcJob | Get-HpcTask -State Queued -ErrorAction SilentlyContinue)
+
+                    $QueuedTaskCount = $qtasks.count
+                    $QueuedJobsCount = $qjobs.count
+                    $jobCount = $jobs.Count
+                    $taskCount = $task.Count
+                    $coreHours = ($tasks | % { $_.Runtime.TotalHours * $_.MinCores } | Measure-Object -Sum | Select-Object -ExpandProperty Sum)
+                    $nodeCount = $nodes.Count
+                    #$coresPerMachine = ($nodes | Measure-Object -Property SubscribedCores -Average | Select-Object -ExpandProperty Average)
+                    #$machineHours = [System.Math]::Ceiling($coreHours / $coresPerMachine)
+                    #$globalHours = [System.Math]::Ceiling($machineHours / $nodeCount)
+
+                    Function CreateMetric
+                    {
+                        param([string]$Name, [string]$Unit="Count", [string]$Value="0", [System.DateTime]$When = (Get-Date).ToUniversalTime())
+                        $dim = New-Object Amazon.CloudWatch.Model.Dimension
+                        $dim.Name = "aws-quickstart"
+                        $dim.Value = "hpcpack"
+
+                        $dat = New-Object Amazon.CloudWatch.Model.MetricDatum
+                        $dat.Timestamp = $When
+                        $dat.MetricName = $Name
+                        $dat.Unit = $Unit
+                        $dat.Value = $Value
+                        $dat.Dimensions = New-Object -TypeName System.Collections.Generic.List[Amazon.CloudWatch.Model.Dimension]
+                        $dat.Dimensions.Add($dim)
+                        $dat
+                    }
+
+                    $now = (Get-Date).ToUniversalTime()
+                    $m1 = (CreateMetric -Name "Job Count" -Value "$jobCount"  -When $now)
+                    $m2 = (CreateMetric -Name "Task Count" -Value "$taskCount"  -When $now)
+                    $m3 = (CreateMetric -Name "Core Hours" -Value "$coreHours"  -When $now)
+                    $m4 = (CreateMetric -Name "Node Count" -Value "$nodeCount"  -When $now)
+                    $m8 = (CreateMetric -Name "Queued Task Count" -Value "$QueuedTaskCount"  -When $now)
+                    $m9 = (CreateMetric -Name "Queued Job Count" -Value "$QueuedJobsCount" -When $now)
+
+                    Write-CWMetricData -Namespace "AWS-QUICKSTART" -MetricData $m1, $m2, $m3, $m4, $m8, $m9 -Region us-east-1 
