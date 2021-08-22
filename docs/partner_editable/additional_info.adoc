@@ -90,6 +90,8 @@ Below are some example scenarios to explain how autoscaling can be used to drive
 
 * Scaling based on queued tasks.
 
+image::../images/Queue-basedASG.png[Architecture]
+
 = Security
 //_Add any security-related information._
 
