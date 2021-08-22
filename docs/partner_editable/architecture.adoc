@@ -23,3 +23,6 @@ As shown in <<architecture1>>, the Quick Start sets up the following:
 // Add bullet points for any additional components that are included in the deployment. Make sure that the additional components are also represented in the architecture diagram. End each bullet with a period.
 * An AWS Managed Directory Service directory.
 * A managed Amazon FSx file system for shared storage.
+
+
+

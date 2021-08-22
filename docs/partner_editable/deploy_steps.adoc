@@ -1,3 +1,18 @@
+=== Prerequisites ===
+
+* Prepare a PFX certificate
+
+For operating system Windows 10 or Windows Server 2016 above.
+
+
+    New-SelfSignedCertificate -Subject "CN=HPC Pack 2019 Communication" -KeySpec KeyExchange -KeyLength 2048 -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.1,1.3.6.1.5.5.7.3.2") -CertStoreLocation cert:\CurrentUser\My -KeyExportPolicy Exportable -HashAlgorithm SHA256 -Provider "Microsoft Enhanced RSA and AES Cryptographic Provider" -NotAfter (Get-Date).AddYears(5) -NotBefore (Get-Date).AddDays(-1)
+
+* Upload the certificate to Amazon S3 Bucket.
+
+Before deploying this QuickStart, upload the PFX certificate to Amazon S3 bucket.
+
+The QuickStart will use parameters **Certificate S3 bucket** & **Certificate S3 key** to locate the certificate.
+
 === Confirm your AWS account configuration
 
 . Sign in to your AWS account at https://aws.amazon.com with an IAM user role that has the necessary permissions. For details, see link:#_planning_the_deployment[Planning the deployment] earlier in this guide.
