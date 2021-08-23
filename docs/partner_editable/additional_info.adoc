@@ -1,23 +1,107 @@
 // Add steps as necessary for accessing the software, post-configuration, and testing. Don’t include full usage instructions for your software, but add links to your product documentation for that information.
 //Should any sections not be applicable, remove them
 
-== Test the deployment
-// If steps are required to test the deployment, add them here. If not, remove the heading
-
-== Post-deployment steps
+= Post-deployment steps
 // If post-deployment steps are required, add them here. If not, remove the heading
 
-== Best practices for using {partner-product-short-name} on AWS
+== Getting Started
+// If post-deployment steps are required, add them here. If not, remove the heading
+
+Once the deployment finishes, review the CloudFormation output 
+
+< We need put screenshots here from output >
+
+== Login to Head Node
+// If post-deployment steps are required, add them here. If not, remove the heading
+
+The Quickstart will deploy a Jumpbox EC2 Instance with HPC Management client libraries installed.
+You can use this windows instance to perform all cluster administration and job management tasks remotely. 
+
+< We need to put screenshots to show how to run HPC Node and jobs commands >
+
+== Scale your Cluster
+// If post-deployment steps are required, add them here. If not, remove the heading
+
+Manually scale your cluster by updating the autoscaling configuration
+
+< We need put screenshots here either command to update ASG numbers or manually hunt for ASG and update >
+
+= Best practices for using {partner-product-short-name} on AWS
 // Provide post-deployment best practices for using the technology on AWS, including considerations such as migrating data, backups, ensuring high performance, high availability, etc. Link to software documentation for detailed information.
 
-_Add any best practices for using the software._
+== Selecting Compute
 
-== Security
-// Provide post-deployment best practices for using the technology on AWS, including considerations such as migrating data, backups, ensuring high performance, high availability, etc. Link to software documentation for detailed information.
+For Head Node,
 
-_Add any security-related information._
+For Compute Node,
 
-== Other useful information
+== Selecting network
+
+Using Single AZ and private subnet
+
+Security Groups
+
+== Selecting storage
+For high performance parallel FileSystem,
+
+For object storage, 
+
+For Data Movement, leverage Data SYNC 
+
+== Placement Groups
+
+Take advantage of Cluster placement groups for tightly coupled HPC Workload.
+HPC applications that exchanges a large amount of data between nodes can use Placement group to provide low latency and high throughput.
+
+The quickStart uses **Cluster Placement group** strategy within the Amazon EC2 Launch template to group all the worker nodes into single Availability zone. 
+
+* Why placement group ?
+
+To learn more, visit the documentation below.
+
+https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/placement-groups.html
+
+A cluster placement group is a logical grouping of instances within a single Availability Zone.
+A cluster placement group can span peered VPCs in the same Region. Instances in the same cluster
+placement group enjoy a higher per-flow throughput limit for TCP/IP traffic and are placed in the 
+same high-bisection bandwidth segment of the network.
+
+
+== Optimize Compute Node AMI
+
+The QuickStart is configured to pull latest Windows Server AMI provided by AWS.
+When scale your cluster using autoscaling group,the user data script within launch template installs the Microsoft HPC Pack software and CloudWatch Agent during the boot.
+This can significantly impact time to prepare the fleet of compute workers and introduce delay in submitting the job.
+
+To further optimize, you could use Amazon EC2 Image Builder to fully baked the Compute Node AMI and update the launch template with AMI ID of custom image.
+
+To learn more about EC2 Image Builder, visit the documentation
+
+https://aws.amazon.com/image-builder/
+
+== Autoscaling Best practices
+//_Add any best practices for using the software._
+
+Autoscaling should be considered based on your requirement. There are scenarios where you can take advantage of autoscaling feature to drive efficiency.
+Below are some example scenarios to explain how autoscaling can be used to drive efficiency.
+
+* Scaling based on fixed capacity.
+
+
+* Scaling based on queued tasks.
+
+image::../images/Queue-basedASG.png[Architecture]
+
+= Security
+//_Add any security-related information._
+
+. Certificates
+. Security Groups for worker, head, rdp etc 
+. Domain join vs non domain join worker
+
+
+
+= Other useful information
 //Provide any other information of interest to users, especially focusing on areas where AWS or cloud usage differs from on-premises usage.
 
 _Add any other details that will help the customer use the software on AWS._

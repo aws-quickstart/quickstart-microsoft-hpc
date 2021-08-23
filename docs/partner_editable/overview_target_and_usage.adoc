@@ -2,6 +2,11 @@
 // Identify your target audience and explain how/why they would use this Quick Start.
 //Avoid borrowing text from third-party websites (copying text from AWS service documentation is fine). Also, avoid marketing-speak, focusing instead on the technical aspect.
 
-This guide provides instructions for deploying a high performance computing (HPC) cluster of Windows EC2 instances in the AWS Cloud.
+This guide provides instructions for deploying Microsoft HPC Pack 2019 software on Amazon EC2  Windows instances in the AWS Cloud. 
 
-This Quick Start is for users who want to establish a framework for deploying HPC workloads.
+With HPC Pack, you can create and manage HPC clusters consisting of Amazon EC2 Windows Instances and take advantage of base infrastructure 
+leveraging cloud native AWS services such as Amazon FSx for Windows server for high performance filesystem, AWS Managed Microsoft AD for identity 
+solution and other Amazon EC2 features such AWS autoscaling, Placement Groups. 
+This QuickStart can help you to quickly evaluate architecture components required for a successful proof of concepts and understand recommended architecture pattern and best practices.
+
+Additionally, you will also learn how to effectively manage HPC Pack Cluster capacity using AWS Autoscaling, Amazon CloudWatch and AWS System Manager.

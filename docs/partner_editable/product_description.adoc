@@ -2,4 +2,16 @@
 // Briefly describe the software. Use consistent and clear branding. 
 // Include the benefits of using the software on AWS, and provide details on usage scenarios.
 
-This Quick Start deploys an HPC head node, used to start new HPC workloads, and an auto scaling group of worker nodes to process the workloads. A jump box is deployed in a public subnet and is used to access the head node from outside the VPC.
+This Quick Start deploys an HPC Pack cluster with one single head node running Microsoft HPC Pack 2019 in Active Directory forest. The base infrastructure includes highly available Active Directory and Windows based network filesystem 
+fully managed, highly reliable, and scalable file storage that is accessible over the industry-standard Server Message Block (SMB) protocol.
+This Quick Start supports Microsoft HPC Pack 2019 on Windows Server 2019 with local datastore using SQL Server Standard edition.
+
+The architecture use key AWS Services and features
+
+* Amazon Machine Image for Head Node - Windows Server 2019 and SQL Server Standard Edition 2019 AMI provided by AWS.    
+* Amazon Machine Image for Compute Node - Windows Server 2019 provided by AWS.
+* Amazon FSx for Windows File Server.
+* AWS Managed Microsoft AD.
+* Amazon S3 - Cloud Object Storage.
+
+The automation in this deployment uses AWS Systems Manager Automation, AWS CloudFormation, and Windows PowerShell to deploy the architecture.
