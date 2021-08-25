@@ -30,12 +30,14 @@ Metadata:
           default: Active directory configuration
         Parameters:
           - DomainDNSName
+          - DomainNetBIOSName
           - ADUserSecrets
+          - DomainJoined
       - Label:
           default: HPC configuratiopn
         Parameters:
           - HTCoreCount
-          - ThreadsPerCore
+#          - ThreadsPerCore
       - Label:
           default: Certificate Configuration
         Parameters:
@@ -45,11 +47,14 @@ Metadata:
           default: Quick Start Configuration
         Parameters:
           - QSS3BucketName
+          - QSS3KeyPrefix
     ParameterLabels:
+      DomainJoined:
+        default: Join domain
       HTCoreCount:
         default: Core count
-      ThreadsPerCore:
-        default: Threads per core
+#      ThreadsPerCore:
+#       default: Threads per core
       HeadNodeNetBIOSName:
         default: Head node NetBIOS name
       WorkerSGID:
@@ -67,7 +72,9 @@ Metadata:
       ADUserSecrets:
         default: Domain Admin secret
       DomainDNSName:
-        default: Domain DNS Name
+        default: Domain DNS name
+      DomainNetBIOSName:
+        default: Domain NetBIOS name
       # DomainMemberSGID:
       #   default: Security Group ID for AD Domain Members
       # DomainNetBIOSName:
@@ -80,6 +87,8 @@ Metadata:
       #   default: Private Subnet 2 ID
       QSS3BucketName:
         default: Quick Start S3 bucket name
+      QSS3KeyPrefix:
+        default: Quick Start S3 key prefix
       #PrivateSubnet3ID:
       #  default: Private Subnet 3 ID
       #VPCID:
@@ -92,6 +101,13 @@ Parameters:
   CertS3Key:
     Description: S3 key for the certificate
     Type: String
+  DomainJoined:
+    Description: Join worker nodes to Active Directory
+    Type: String
+    AllowedValues:
+      - 'True'
+      - 'False'
+    Default: 'False'
   WorkerSGID:
     Description: 'WORKER Security Group '
     Type: 'AWS::EC2::SecurityGroup::Id'
@@ -114,6 +130,14 @@ Parameters:
     MaxLength: '255'
     MinLength: '2'
     Type: String
+  DomainNetBIOSName:
+    AllowedPattern: '[a-zA-Z0-9\-]+'
+    Default: EXAMPLE
+    Description: NetBIOS name of the domain (up to 15 characters) for users of earlier
+      versions of Windows e.g. EXAMPLE
+    MaxLength: '15'
+    MinLength: '1'
+    Type: String
   KeyPairName:
     Description: >-
       Public/private key pairs allow you to securely connect to your instance
@@ -123,12 +147,12 @@ Parameters:
     Default: '2'
     Description: This depends on Instance Type. For example To disable HT for c5d.18xlarge, specify 32.
     Type: String
-  ThreadsPerCore:
-    AllowedValues:
-      - '1'
-    Default: '1'
-    Description: This disables HYPERTHREADING
-    Type: String
+#  ThreadsPerCore:
+#    AllowedValues:
+#      - '1'
+#    Default: '1'
+#    Description: This disables HYPERTHREADING
+#    Type: String
   # MasterServerName:
   #   AllowedPattern: '[a-zA-Z0-9\-]+'
   #   Default: EC2AMAZ-Q5VLDH3
@@ -166,6 +190,22 @@ Parameters:
       include numbers, lowercase letters, uppercase letters, and hyphens (-). It
       cannot start or end with a hyphen (-).
     Type: String
+  QSS3KeyPrefix:
+    AllowedPattern: '^[0-9a-zA-Z-/]*$'
+    ConstraintDescription:
+      The Quick Start S3 key prefix can include numbers, lowercase letters,
+      uppercase letters, hyphens (-), and forward slashes (/). The prefix should
+      end with a forward slash (/).
+    Default: quickstart-microsoft-hpc/
+    Description:
+      S3 key prefix that is used to simulate a directory for your copy of the 
+      Quick Start assets. Keep the default prefix unless you are customizing 
+      the template. Changing this prefix updates code references to point to 
+      a new Quick Start location. This prefix can include numbers, lowercase 
+      letters, uppercase letters, hyphens (-), and forward slashes (/). End with 
+      a forward slash. See https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingMetadata.html 
+      and https://aws-quickstart.github.io/option1.html.
+    Type: String
   # VPCID:
   #   Description: 'ID of the VPC (e.g., vpc-0343606e)'
   #   Type: 'AWS::EC2::VPC::Id'
@@ -185,7 +225,64 @@ Parameters:
     Default: c5d.xlarge
     Description: Amazon EC2 instance type for Worker NOde
     Type: String
+Conditions:
+  UsingDefaultBucket: !Equals [!Ref QSS3BucketName, 'aws-quickstart']
+  JoinDomain: !Equals [!Ref DomainJoined, 'True']
 Resources:
+  EventBridgeSSMAutoRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Policies:
+        - PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+                - ssm:StartAutomationExecution
+              Resource:
+                - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:automation-definition/${RemoveConfigurationDoc}:$DEFAULT'
+                - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:automation-definition/${SetupConfigurationDoc}:$DEFAULT'
+            - Effect: Allow
+              Action:
+                - iam:PassRole
+              Resource:
+                - !GetAtt ExecutionResourceRole.Arn
+              Condition: {"StringLikeIfExists": {"iam:PassedToService": "ssm.amazonaws.com"}}
+          PolicyName: "EventBridge_Invoke_SSM_Automation"
+      Path: /service-role/
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: 
+                - events.amazonaws.com
+            Action: sts:AssumeRole
+  ExecutionResourceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Policies:
+        - PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - autoscaling:CompleteLifecycleAction
+                Resource: !Sub arn:aws:autoscaling:*:${AWS::AccountId}:autoScalingGroup:*:autoScalingGroupName/${ASGName}
+          PolicyName: asg-lch-complete
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ssm.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonSSMAutomationRole
+      Description: New IAM role to allow SSM access.
   WorkerRole:
     Type: AWS::IAM::Role
     Properties:
@@ -247,7 +344,7 @@ Resources:
           Arn: !GetAtt WorkerInstanceProfile.Arn
         CpuOptions:
           CoreCount: !Ref HTCoreCount
-          ThreadsPerCore: !Ref ThreadsPerCore
+          ThreadsPerCore: '1'
         UserData:
           'Fn::Base64': !Sub |
               <powershell>
@@ -400,6 +497,7 @@ Resources:
     Type: 'AWS::AutoScaling::AutoScalingGroup'
     DependsOn:
       - LaunchConfig
+      - ScaleUpEventBridgeResource
     Properties:
       AutoScalingGroupName: !Ref ASGName
       VPCZoneIdentifier:
@@ -414,3 +512,422 @@ Resources:
       MinSize: '0'
       MaxSize: '0'
       PlacementGroup: !Ref PlacementGroup
+  ScaleUpEventBridgeResource:
+    Type: AWS::Events::Rule
+    Properties:
+      State: !If [JoinDomain, 'ENABLED', 'DISABLED']
+      Description: Run configuration document that joins domain.
+      EventPattern:
+        source:
+          - aws.autoscaling
+        detail-type:
+          - EC2 Instance-launch Lifecycle Action
+        detail:
+          AutoScalingGroupName:
+            - !Sub "${AWS::StackName}"
+      Targets:
+        - Arn: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:automation-definition/${SetupConfigurationDoc}:$DEFAULT'
+          Id: Windows-Scale-Out
+          RoleArn: !GetAtt EventBridgeSSMAutoRole.Arn
+          InputTransformer:
+            InputPathsMap:
+              InstanceId: $.detail.EC2InstanceId
+              ASGName: $.detail.AutoScalingGroupName
+              LCHName: $.detail.LifecycleHookName
+            InputTemplate: !Sub '{"AutomationAssumeRole":["${ExecutionResourceRole.Arn}"],"InstanceId":[<InstanceId>],"ASGName":[<ASGName>],"LCHName":[<LCHName>],"QSS3BucketName":["${QSS3BucketName}"],"QSS3KeyPrefix":["${QSS3KeyPrefix}"],"URLSuffix":["${AWS::URLSuffix}"], "DomainNetBIOSName":["${DomainNetBIOSName}"], "DomainDNSName":["${DomainDNSName}"]}'
+  ScaleDownEventBridgeResource:
+    Type: AWS::Events::Rule
+    Properties:
+      State: !If [JoinDomain, 'ENABLED', 'DISABLED']
+      Description: Run removal document that unjoins domain.
+      EventPattern:
+        source:
+          - aws.autoscaling
+        detail-type:
+          - EC2 Instance-terminate Lifecycle Action
+        detail:
+          AutoScalingGroupName:
+            - !Sub "${AWS::StackName}"
+      Targets:
+        - Arn: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:automation-definition/${RemoveConfigurationDoc}:$DEFAULT'
+          Id: Windows-Scale-In
+          RoleArn: !GetAtt EventBridgeSSMAutoRole.Arn
+          InputTransformer:
+            InputPathsMap:
+              InstanceId: $.detail.EC2InstanceId
+              ASGName: $.detail.AutoScalingGroupName
+              LCHName: $.detail.LifecycleHookName
+            InputTemplate: !Sub '{"AutomationAssumeRole":["${ExecutionResourceRole.Arn}"],"InstanceId":[<InstanceId>],"ASGName":[<ASGName>],"LCHName":[<LCHName>]}'
+  SetupConfigurationDoc:
+    Type: AWS::SSM::Document
+    Properties:
+      DocumentType: Automation
+      Content: 
+        schemaVersion: "0.3"
+        description: "Configure instances on launch."
+        assumeRole: "{{AutomationAssumeRole}}"
+        parameters:
+          InstanceId:
+            description: "ID of the instance."
+            type: "String" 
+          ASGName:
+            description: "Auto Scaling group name."
+            type: "String"
+          LCHName:
+            description: "Life cycle hook name."
+            type: "String"
+          DomainDNSName: 
+            default: "example.com"
+            description: "Fully qualified domain name (FQDN) of the forest root domain (for example, example.com)."
+            type: "String"
+          DomainNetBIOSName:
+            default: "example"
+            description: "NetBIOS name of the domain (up to 15 characters) for users of earlier versions of Windows (for example, EXAMPLE)."
+            type: "String"
+          QSS3BucketName:
+            default: "aws-quickstart"
+            description: "Name of the S3 bucket for your copy of the Quick Start assets. 
+      Keep the default name unless you are customizing the template. 
+      Changing the name updates code references to point to a new Quick 
+      Start location. This name can include numbers, lowercase letters, 
+      uppercase letters, and hyphens, but do not start or end with a hyphen (-). 
+      See https://aws-quickstart.github.io/option1.html."
+            type: "String"
+          QSS3KeyPrefix:
+            default: "quickstart-microsoft-hpc/"
+            description: "S3 key prefix that is used to simulate a directory for your copy of the 
+      Quick Start assets. Keep the default prefix unless you are customizing 
+      the template. Changing this prefix updates code references to point to 
+      a new Quick Start location. This prefix can include numbers, lowercase 
+      letters, uppercase letters, hyphens (-), and forward slashes (/). 
+      See https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingMetadata.html 
+      and https://aws-quickstart.github.io/option1.html."
+            type: "String"
+          URLSuffix:
+            default: "amazonaws.com"
+            description: "AWS URL suffix."
+            type: "String"
+          AutomationAssumeRole:
+            default: ""
+            description: "(Optional) The ARN of the role that allows automation to perform the actions on your behalf."
+            type: "String" 
+        mainSteps:
+          - name: waitUntilInstanceStateRunning
+            action: aws:waitForAwsResourceProperty
+            timeoutSeconds: 600
+            inputs:
+              Service: ec2
+              Api: DescribeInstanceStatus
+              InstanceIds:
+                - "{{InstanceId}}"
+              PropertySelector: "$.InstanceStatuses[0].InstanceState.Name"
+              DesiredValues:
+                - running
+          - name: assertInstanceStateRunning
+            action: aws:assertAwsResourceProperty
+            inputs:
+              Service: ec2
+              Api: DescribeInstanceStatus
+              InstanceIds:
+                - "{{InstanceId}}"
+              PropertySelector: "$.InstanceStatuses[0].InstanceState.Name"
+              DesiredValues:
+                - running
+          - name: "InstallDSCmodules"
+            action: aws:runCommand
+            onFailure: "step:abandonHookAction"
+            inputs:
+              DocumentName: AWS-RunPowerShellScript
+              InstanceIds: 
+                - "{{InstanceId}}"
+              CloudWatchOutputConfig:
+                CloudWatchOutputEnabled: "true"
+                CloudWatchLogGroupName: !Sub "/QuickStart/hpc/${AWS::StackName}/SetupConfiguration"
+              Parameters:
+                commands: 
+                  - |
+                     <#
+                         .SYNOPSIS
+                         install-dsc-modules.ps1
+                     
+                         .DESCRIPTION
+                         This script downloads and installs the required PowerShell modules to create and configure Active Directory Domain Controllers. 
+                         It also creates a self signed certificate to be uses with PowerShell DSC.
+                         
+                         .EXAMPLE
+                         .\install-dsc-modules
+                     #>
+                     
+                     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+                     
+                     Write-Output 'Installing NuGet Package Provider'
+                     Try {
+                         Install-PackageProvider -Name 'NuGet' -MinimumVersion '2.8.5' -Force -ErrorAction Stop
+                     } Catch [System.Exception] {
+                         Write-Output "Failed to install NuGet Package Provider $_"
+                         Exit 1
+                     }
+                     
+                     Write-Output 'Setting PSGallery Respository to trusted'
+                     Try {
+                         Set-PSRepository -Name 'PSGallery' -InstallationPolicy 'Trusted' -ErrorAction Stop
+                     } Catch [System.Exception] {
+                         Write-Output "Failed to set PSGallery Respository to trusted $_"
+                         Exit 1
+                     }
+                     
+                     Write-Output 'Installing the needed Powershell DSC modules for this Quick Start'
+                     $Modules = @(
+                         @{
+                             Name = 'ActiveDirectoryDsc'
+                             Version = '6.0.1'
+                         },
+                         @{
+                             Name = 'ComputerManagementDsc'
+                             Version = '8.4.0'
+                         }
+                     )
+                     
+                     Foreach ($Module in $Modules) {
+                         Try {
+                             Install-Module -Name $Module.Name -RequiredVersion $Module.Version -ErrorAction Stop
+                         } Catch [System.Exception] {
+                             Write-Output "Failed to Import Modules $_"
+                             Exit 1
+                         }
+                     }
+          - name: "GenerateDomainJoinMof"
+            action: aws:runCommand
+            onFailure: "step:abandonHookAction"
+            inputs:
+              DocumentName: AWS-RunPowerShellScript
+              InstanceIds: 
+                - "{{InstanceId}}"
+              CloudWatchOutputConfig:
+                CloudWatchOutputEnabled: "true"
+                CloudWatchLogGroupName: !Sub "/QuickStart/hpc/${AWS::StackName}/SetupConfiguration"
+              Parameters:
+                commands: 
+                  - !Sub |
+                     [CmdletBinding()]
+                     # Incoming Parameters for Script, CloudFormation\SSM Parameters being passed in
+                     param()
+                     
+                     # Creating Configuration Data Block that allows plain test password 
+                     # for DSC Configuration Processing
+                     $ConfigurationData = @{
+                         AllNodes = @(
+                             @{
+                                 NodeName="*"
+                                 PSDscAllowPlainTextPassword = $true
+                                 PSDscAllowDomainUser = $true
+                             },
+                             @{
+                                 NodeName = 'localhost'
+                             }
+                         )
+                     }
+                     
+                     Configuration DomainJoin {
+                         $ss = ConvertTo-SecureString -String 'stringdoesntmatter' -AsPlaintext -Force
+                         $Credentials = New-Object PSCredential('${ADUserSecrets}', $ss)
+                     
+                         Import-Module -Name PSDesiredStateConfiguration
+                         Import-Module -Name ComputerManagementDsc
+                         
+                         Import-DscResource -Module PSDesiredStateConfiguration
+                         Import-DscResource -Module ComputerManagementDsc
+                     
+                         Node 'localhost' {
+                     
+                             Computer JoinDomain {
+                                 Name = $env:COMPUTERNAME
+                                 DomainName = '{{DomainDNSName}}'
+                                 Credential = $Credentials
+                             }
+                         }
+                     }
+                     
+                     DomainJoin -OutputPath 'C:\AWSQuickstart\DomainJoin' -ConfigurationData $ConfigurationData
+          - name: "applyDomainJoin"
+            action: aws:runCommand
+            onFailure: step:abandonHookAction
+            inputs:
+              DocumentName: AWS-ApplyDSCMofs
+              InstanceIds: 
+                - "{{InstanceId}}"
+              CloudWatchOutputConfig:
+                CloudWatchOutputEnabled: "true"
+                CloudWatchLogGroupName: !Sub "/QuickStart/hpc/${AWS::StackName}/SetupConfiguration"
+              Parameters:
+                MofsToApply:
+                  - "C:\\AWSQuickstart\\DomainJoin\\localhost.mof"
+                ServicePath:
+                  - default
+                MofOperationMode:
+                  - Apply
+                ModuleSourceBucketName:
+                  - "NONE"
+                AllowPSGalleryModuleSource:
+                  - "True"
+                RebootBehavior:
+                  - "AfterMof"
+                UseComputerNameForReporting:
+                  - "False"
+                EnableVerboseLogging:
+                  - "False"
+                EnableDebugLogging:
+                  - "False"
+          - name: "completeHookAction"
+            action: aws:executeAwsApi
+            isEnd: true
+            inputs:
+              Service: autoscaling
+              Api: CompleteLifecycleAction
+              AutoScalingGroupName: "{{ASGName}}"
+              InstanceId: "{{InstanceId}}"
+              LifecycleActionResult: CONTINUE
+              LifecycleHookName: "{{LCHName}}"
+          - name: "abandonHookAction"
+            action: aws:executeAwsApi
+            isEnd: true
+            inputs:
+              Service: autoscaling
+              Api: CompleteLifecycleAction
+              AutoScalingGroupName: "{{ASGName}}"
+              InstanceId: "{{InstanceId}}"
+              LifecycleActionResult: ABANDON
+              LifecycleHookName: "{{LCHName}}"
+  RemoveConfigurationDoc:
+    Type: AWS::SSM::Document
+    Properties:
+      DocumentType: Automation
+      Content:
+        schemaVersion: "0.3"
+        description: "Remove EC2 Instances from AD domain."
+        assumeRole: "{{AutomationAssumeRole}}"
+        parameters:
+          InstanceId:
+            description: "ID of the instance."
+            type: "String" 
+          ASGName:
+            description: "Auto Scaling group name."
+            type: "String"
+          LCHName:
+            description: "Life cycle hook name."
+            type: "String"
+          AutomationAssumeRole:
+            default: ""
+            description: "(Optional) The ARN of the role that allows automation to perform the actions on your behalf."
+            type: "String" 
+        mainSteps:
+          - name: "GenerateRemoveJoinMof"
+            action: aws:runCommand
+            onFailure: "step:abandonHookAction"
+            inputs:
+              DocumentName: AWS-RunPowerShellScript
+              InstanceIds: 
+                - "{{InstanceId}}"
+              CloudWatchOutputConfig:
+                CloudWatchOutputEnabled: "true"
+                CloudWatchLogGroupName: !Sub "/QuickStart/hpc/${AWS::StackName}/RemoveConfiguration"
+              Parameters:
+                commands: 
+                  - !Sub |
+                      [CmdletBinding()]
+                      # Incoming Parameters for Script, CloudFormation\SSM Parameters being passed in
+                      param()
+                      
+                      $ConfigurationData = @{
+                          AllNodes = @(
+                              @{
+                                  NodeName="*"
+                                  PSDscAllowPlainTextPassword = $true
+                                  PSDscAllowDomainUser = $true
+                              },
+                              @{
+                                  NodeName = 'localhost'
+                              }
+                          )
+                      }
+                      
+                      Configuration RemoveDomain {
+                      
+                          $ss = ConvertTo-SecureString -String 'stringdoesntmatter' -AsPlaintext -Force
+                          $Credentials = New-Object PSCredential("${ADUserSecrets}", $ss)
+                          
+                      
+                          Import-Module -Name PSDesiredStateConfiguration
+                          Import-Module -Name ComputerManagementDsc
+                          Import-Module -Name ActiveDirectoryDsc
+                          
+                          Import-DscResource -Module PSDesiredStateConfiguration
+                          Import-DscResource -Module ComputerManagementDsc
+                          Import-DscResource -Module ActiveDirectoryDsc
+                      
+                      
+                          Node localhost {
+                              WindowsFeature RSAT-AD-PowerShell {
+                                  Name = 'RSAT-AD-PowerShell'
+                                  Ensure = 'Present'
+                              }
+                              
+                              ADComputer RemoveDomain {
+                                  ComputerName = $env:COMPUTERNAME
+                                  Ensure = 'Absent'
+                                  Credential = $Credentials
+                                  DependsOn = "[WindowsFeature]RSAT-AD-PowerShell"
+                              }
+                          }
+                      }
+                      
+                      RemoveDomain -OutputPath 'C:\AWSQuickstart\RemoveDomain' -ConfigurationData $ConfigurationData
+          - name: "RemoveFromDomain"
+            action: aws:runCommand
+            onFailure: step:abandonHookAction
+            inputs:
+              DocumentName: AWS-ApplyDSCMofs
+              InstanceIds: 
+                - "{{InstanceId}}"
+              CloudWatchOutputConfig:
+                CloudWatchOutputEnabled: "true"
+                CloudWatchLogGroupName: !Sub "/QuickStart/hpc/${AWS::StackName}/RemoveConfiguration"
+              Parameters:
+                MofsToApply:
+                  - "C:\\AWSQuickstart\\RemoveDomain\\localhost.mof"
+                ServicePath:
+                  - default
+                MofOperationMode:
+                  - Apply
+                ModuleSourceBucketName:
+                  - "NONE"
+                AllowPSGalleryModuleSource:
+                  - "True"
+                RebootBehavior:
+                  - "AfterMof"
+                UseComputerNameForReporting:
+                  - "False"
+                EnableVerboseLogging:
+                  - "False"
+                EnableDebugLogging:
+                  - "False"
+          - name: "completeHookAction"
+            action: aws:executeAwsApi
+            isEnd: true
+            inputs:
+              Service: autoscaling
+              Api: CompleteLifecycleAction
+              AutoScalingGroupName: "{{ASGName}}"
+              InstanceId: "{{InstanceId}}"
+              LifecycleActionResult: CONTINUE
+              LifecycleHookName: "{{LCHName}}"
+          - name: "abandonHookAction"
+            action: aws:executeAwsApi
+            isEnd: true
+            inputs:
+              Service: autoscaling
+              Api: CompleteLifecycleAction
+              AutoScalingGroupName: "{{ASGName}}"
+              InstanceId: "{{InstanceId}}"
+              LifecycleActionResult: ABANDON
+              LifecycleHookName: "{{LCHName}}"
