@@ -54,8 +54,9 @@ Metadata:
         Parameters:
           - WorkerInstanceType
           - ASGName
+          - DomainJoined
           - HTCoreCount
-          - ThreadsPerCore
+#          - ThreadsPerCore
       # - Label:
       #     default: FSX Storage Configuration
       #   Parameters:
@@ -67,6 +68,8 @@ Metadata:
         default: Certificate S3 bucket
       CertS3Key:
         default: Certificate S3 key
+      DomainJoined:
+        default: Join domain
       RemoteAccessCIDR:
         default: Remote access CIDR
       PrivateSubnet1CIDR:
@@ -123,6 +126,13 @@ Parameters:
     Description: S3 key for the certificate
     Type: String
     Default: quickstart-microsoft-hpc/mypfx.pfx
+  DomainJoined:
+    Description: Join worker nodes to Active Directory
+    Type: String
+    AllowedValues:
+      - 'True'
+      - 'False'
+    Default: 'False'
   RemoteAccessCIDR:
     Description: Remote access CIDR
     Default: "0.0.0.0/0"
@@ -295,12 +305,12 @@ Parameters:
     Description: This depends on Instance Type. For example To disable HT for c5d.18xlarge,
       specify 32.
     Type: String
-  ThreadsPerCore:
-    AllowedValues:
-      - '1'
-    Default: '1'
-    Description: Setting this to 1 disables HYPERTHREADING
-    Type: String
+#  ThreadsPerCore:
+#    AllowedValues:
+#      - '1'
+#    Default: '1'
+#    Description: Setting this to 1 disables HYPERTHREADING
+#    Type: String
 Conditions:
   UsingDefaultBucket: !Equals [!Ref QSS3BucketName, 'aws-quickstart']
 Resources:
@@ -373,10 +383,12 @@ Resources:
         ASGName: !Ref 'ASGName'
         HeadNodeNetBIOSName: !Ref 'HeadNodeNetBIOSName'
         DomainDNSName: !Ref 'DomainDNSName'
+        DomainNetBIOSName: !Ref 'DomainNetBIOSName'
         ADUserSecrets: !Ref ADUserSecrets
         WorkerInstanceType: !Ref 'WorkerInstanceType'
         HTCoreCount: !Ref 'HTCoreCount'
-        ThreadsPerCore: !Ref 'ThreadsPerCore'
+#        ThreadsPerCore: !Ref 'ThreadsPerCore'
         QSS3BucketName: !Ref 'QSS3BucketName'
+        QSS3KeyPrefix: !Ref 'QSS3KeyPrefix'
         CertS3Bucket: !Ref 'CertS3Bucket'
         CertS3Key: !Ref 'CertS3Key'

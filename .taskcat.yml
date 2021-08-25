@@ -12,6 +12,7 @@ tests:
       CertS3Bucket: 'davmayd2'
       CertS3Key: mypfx.pfx
       DomainAdminPassword: $[taskcat_genpass_16]
+      DomainJoined: 'True'
       KeyPairName: $[taskcat_getkeypair]
       QSS3BucketName: $[taskcat_autobucket]
       QSS3BucketRegion: $[taskcat_current_region]
