@@ -506,6 +506,15 @@ Resources:
         - Key: 'MasterServerName'
           Value: !Ref HeadNodeNetBIOSName
           PropagateAtLaunch: true
+      LifecycleHookSpecificationList:
+        - LifecycleTransition: autoscaling:EC2_INSTANCE_LAUNCHING
+          LifecycleHookName: DomainJoinHook
+          DefaultResult: ABANDON
+          HeartbeatTimeout: 1200
+        - LifecycleTransition: autoscaling:EC2_INSTANCE_TERMINATING
+          LifecycleHookName: DomainUnjoinHook
+          DefaultResult: ABANDON
+          HeartbeatTimeout: 600
       LaunchTemplate:
         LaunchTemplateName: 'GridHelperLT'
         Version: '1'
@@ -524,7 +533,7 @@ Resources:
           - EC2 Instance-launch Lifecycle Action
         detail:
           AutoScalingGroupName:
-            - !Sub "${AWS::StackName}"
+            - !Ref ASGName
       Targets:
         - Arn: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:automation-definition/${SetupConfigurationDoc}:$DEFAULT'
           Id: Windows-Scale-Out
@@ -547,7 +556,7 @@ Resources:
           - EC2 Instance-terminate Lifecycle Action
         detail:
           AutoScalingGroupName:
-            - !Sub "${AWS::StackName}"
+            - !Ref ASGName
       Targets:
         - Arn: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:automation-definition/${RemoveConfigurationDoc}:$DEFAULT'
           Id: Windows-Scale-In
