@@ -389,6 +389,11 @@ Resources:
         HTCoreCount: !Ref 'HTCoreCount'
 #        ThreadsPerCore: !Ref 'ThreadsPerCore'
         QSS3BucketName: !Ref 'QSS3BucketName'
+        QSS3BucketRegion: !Ref 'QSS3BucketRegion'
         QSS3KeyPrefix: !Ref 'QSS3KeyPrefix'
         CertS3Bucket: !Ref 'CertS3Bucket'
         CertS3Key: !Ref 'CertS3Key'
+Outputs:
+  ADUserSecrets: 
+    Value: !Ref 'ADUserSecrets'
+    Description: "AD user secrets"

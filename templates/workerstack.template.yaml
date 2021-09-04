@@ -47,6 +47,7 @@ Metadata:
           default: Quick Start Configuration
         Parameters:
           - QSS3BucketName
+          - QSS3BucketRegion
           - QSS3KeyPrefix
     ParameterLabels:
       DomainJoined:
@@ -87,6 +88,8 @@ Metadata:
       #   default: Private Subnet 2 ID
       QSS3BucketName:
         default: Quick Start S3 bucket name
+      QSS3BucketRegion:
+        default: Quick Start S3 bucket region
       QSS3KeyPrefix:
         default: Quick Start S3 key prefix
       #PrivateSubnet3ID:
@@ -189,6 +192,14 @@ Parameters:
       Bucket name to store automation assets. Bucket name can
       include numbers, lowercase letters, uppercase letters, and hyphens (-). It
       cannot start or end with a hyphen (-).
+    Type: String
+  QSS3BucketRegion:
+    Default: 'us-east-1'
+    Description: 'AWS Region where the Quick Start S3 bucket (QSS3BucketName) is 
+    hosted. Keep the default Region unless you are customizing the template. 
+    Changing this Region updates code references to point to a new Quick Start location. 
+    When using your own bucket, specify the Region. 
+    See https://aws-quickstart.github.io/option1.html.'
     Type: String
   QSS3KeyPrefix:
     AllowedPattern: '^[0-9a-zA-Z-/]*$'
@@ -349,144 +360,144 @@ Resources:
         CpuOptions:
           CoreCount: !Ref HTCoreCount
           ThreadsPerCore: '1'
-        UserData:
-          'Fn::Base64': !Sub |
-              <powershell>
-              function ConvertTo-HexIP {
-              <#
-              .Synopsis
-              Converts a dotted decimal IP address into a hexadecimal string.
-              .Description
-              ConvertTo-HexIP takes a dotted decimal IP and returns a single hexadecimal string value.
-              .Parameter IPAddress
-              An IP Address to convert.
-              #>
+        # UserData:
+        #   'Fn::Base64': !Sub |
+        #       <powershell>
+        #       function ConvertTo-HexIP {
+        #       <#
+        #       .Synopsis
+        #       Converts a dotted decimal IP address into a hexadecimal string.
+        #       .Description
+        #       ConvertTo-HexIP takes a dotted decimal IP and returns a single hexadecimal string value.
+        #       .Parameter IPAddress
+        #       An IP Address to convert.
+        #       #>
 
-              [CmdLetBinding()]
-              param(
-              [Parameter(Mandatory = $true, Position = 0, ValueFromPipeline = $true)]
-              [Net.IPAddress]$IPAddress
-              )
+        #       [CmdLetBinding()]
+        #       param(
+        #       [Parameter(Mandatory = $true, Position = 0, ValueFromPipeline = $true)]
+        #       [Net.IPAddress]$IPAddress
+        #       )
 
-              process {
-              "$($IPAddress.GetAddressBytes() | ForEach-Object { '{0:x2}' -f $_ })" -Replace 's'
-              }
-              }
+        #       process {
+        #       "$($IPAddress.GetAddressBytes() | ForEach-Object { '{0:x2}' -f $_ })" -Replace 's'
+        #       }
+        #       }
 
-              $instanceId = (Invoke-RestMethod -Method Get -Uri http://169.254.169.254/latest/meta-data/instance-id)
-              $hostIP = (Invoke-RestMethod -Method Get -Uri http://169.254.169.254/latest/meta-data/local-ipv4)
-              $hostName =  ConvertTo-HexIP($hostIP)
-              $hostName = "ip-" + $hostName -replace('\s','')
-              $tags = Get-EC2Tag | Where-Object {$_.ResourceId -eq $instanceId -and $_.Key -eq "MasterServerName"}
-              $masterName = $tags.Value
-              $retryCount = 4
-              $retryDelay = 60
-              $selfTestPassed = 1
+        #       $instanceId = (Invoke-RestMethod -Method Get -Uri http://169.254.169.254/latest/meta-data/instance-id)
+        #       $hostIP = (Invoke-RestMethod -Method Get -Uri http://169.254.169.254/latest/meta-data/local-ipv4)
+        #       $hostName =  ConvertTo-HexIP($hostIP)
+        #       $hostName = "ip-" + $hostName -replace('\s','')
+        #       $tags = Get-EC2Tag | Where-Object {$_.ResourceId -eq $instanceId -and $_.Key -eq "MasterServerName"}
+        #       $masterName = $tags.Value
+        #       $retryCount = 4
+        #       $retryDelay = 60
+        #       $selfTestPassed = 1
 
-              ######## Self Test 1 - Ping Headnode and HPC APP Service #########
+        #       ######## Self Test 1 - Ping Headnode and HPC APP Service #########
 
-              $test1Passed = $false
-              $test1RetryCount = 0
+        #       $test1Passed = $false
+        #       $test1RetryCount = 0
 
-              while($test1Passed -eq $false -and $test1RetryCount -lt $retryCount)
-              {
-              $test1Result = Test-NetConnection -ComputerName $masterName 
+        #       while($test1Passed -eq $false -and $test1RetryCount -lt $retryCount)
+        #       {
+        #       $test1Result = Test-NetConnection -ComputerName $masterName 
 
-              if($test1Result.PingSucceeded -eq $true)
-              {
-              $test1Passed = $true
-              }
-              else
-              {
-              Start-Sleep -Seconds $retryDelay
-              $test1RetryCount = $test1RetryCount + 1
-              }
-              }
+        #       if($test1Result.PingSucceeded -eq $true)
+        #       {
+        #       $test1Passed = $true
+        #       }
+        #       else
+        #       {
+        #       Start-Sleep -Seconds $retryDelay
+        #       $test1RetryCount = $test1RetryCount + 1
+        #       }
+        #       }
 
-              ####### Self Test 2 - Test Head Node Service Running #########
-              $test2Passed = $false
-              if($test1Passed -eq $true)
-              {
-              $GLService = Get-Service -Name Dhcp
+        #       ####### Self Test 2 - Test Head Node Service Running #########
+        #       $test2Passed = $false
+        #       if($test1Passed -eq $true)
+        #       {
+        #       $GLService = Get-Service -Name Dhcp
 
-              if($GLService.Status -ne 'Running')
-              {
+        #       if($GLService.Status -ne 'Running')
+        #       {
 
-              Start-Service -Name Dhcp
-              $GLService = Get-Service -Name Dhcp
-              }
-              if($GLService.Status -eq 'Running')
-              {
-              $test2Passed = $true
-              }
-              }
+        #       Start-Service -Name Dhcp
+        #       $GLService = Get-Service -Name Dhcp
+        #       }
+        #       if($GLService.Status -eq 'Running')
+        #       {
+        #       $test2Passed = $true
+        #       }
+        #       }
 
-              ######### Action Based on Tests ####################
-              New-EC2Tag -Resource $instanceId -Tag @{Key="Name"; Value="$HostName"}
-              New-EC2Tag -Resource $instanceId -Tag @{Key="Octank_InFarm"; Value="pass"}
+        #       ######### Action Based on Tests ####################
+        #       New-EC2Tag -Resource $instanceId -Tag @{Key="Name"; Value="$HostName"}
+        #       New-EC2Tag -Resource $instanceId -Tag @{Key="Octank_InFarm"; Value="pass"}
 
-              if($test1Passed -eq $true -and $test2Passed -eq $true)
-              {
-              New-EC2Tag -Resource $instanceId -Tag @{Key="Octank_PassedTest"; Value="Pass"}
-              }
-              else
-              {
-              New-EC2Tag -Resource $instanceId -Tag @{Key="Octank_PassedTest"; Value="Fail"}
-              Set-ASInstanceHealth -InstanceId $instanceId -HealthStatus "Unhealthy"
-              }
-              #####  MSHPCPACK Install #############
-              Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
-              Write-Host "Disabling Windows Firewall"
-              Get-NetFirewallProfile | Set-NetFirewallProfile -Enabled False
+        #       if($test1Passed -eq $true -and $test2Passed -eq $true)
+        #       {
+        #       New-EC2Tag -Resource $instanceId -Tag @{Key="Octank_PassedTest"; Value="Pass"}
+        #       }
+        #       else
+        #       {
+        #       New-EC2Tag -Resource $instanceId -Tag @{Key="Octank_PassedTest"; Value="Fail"}
+        #       Set-ASInstanceHealth -InstanceId $instanceId -HealthStatus "Unhealthy"
+        #       }
+        #       #####  MSHPCPACK Install #############
+        #       Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+        #       Write-Host "Disabling Windows Firewall"
+        #       Get-NetFirewallProfile | Set-NetFirewallProfile -Enabled False
 
-              $Admin = ConvertFrom-Json -InputObject (Get-SECSecretValue -SecretId "${ADUserSecrets}").SecretString
-              $DomainAdminPassword = $Admin.password
+        #       $Admin = ConvertFrom-Json -InputObject (Get-SECSecretValue -SecretId "${ADUserSecrets}").SecretString
+        #       $DomainAdminPassword = $Admin.password
               
-              Write-Host "Disabling IE Enhanced Security Configuration (ESC)..."
-              $AdminKey = "HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A7-37EF-4b3f-8CFC-4F3A74704073}"
-              $UserKey = "HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A8-37EF-4b3f-8CFC-4F3A74704073}"
-              Set-ItemProperty -Path $AdminKey -Name "IsInstalled" -Value 0
-              Set-ItemProperty -Path $UserKey -Name "IsInstalled" -Value 0
+        #       Write-Host "Disabling IE Enhanced Security Configuration (ESC)..."
+        #       $AdminKey = "HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A7-37EF-4b3f-8CFC-4F3A74704073}"
+        #       $UserKey = "HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A8-37EF-4b3f-8CFC-4F3A74704073}"
+        #       Set-ItemProperty -Path $AdminKey -Name "IsInstalled" -Value 0
+        #       Set-ItemProperty -Path $UserKey -Name "IsInstalled" -Value 0
               
-              Write-Host "Download HPCPACK Software"
-              Write-Host "Creating Directory for HPC PACK 2019 Public Cert"
-              New-Item -Path C:\ms-hpcpack2019\ -ItemType directory -Force
-              $url = "https://download.microsoft.com/download/c/e/b/ceb6122c-1006-44f8-99b1-1792f928f155/HPC%20Pack%202019.zip"
-              $location = "C:\ms-hpcpack2019\HPCPack2019.zip"
-              $wc = New-Object net.webclient
-              $wc.Downloadfile($url,$location)
-              $installdir = "C:\install"
-              Set-ExecutionPolicy Bypass -Scope Process -Force;
-              Expand-Archive -Path $location -DestinationPath $installdir
-              $cerFileName = "C:\ms-hpcpack2019\myhpc.pfx"
-              $bucket = "${QSS3BucketName}"
-              Copy-S3Object -BucketName "${CertS3Bucket}" -Key "${CertS3Key}" -LocalFile $cerFileName
+        #       Write-Host "Download HPCPACK Software"
+        #       Write-Host "Creating Directory for HPC PACK 2019 Public Cert"
+        #       New-Item -Path C:\ms-hpcpack2019\ -ItemType directory -Force
+        #       $url = "https://download.microsoft.com/download/c/e/b/ceb6122c-1006-44f8-99b1-1792f928f155/HPC%20Pack%202019.zip"
+        #       $location = "C:\ms-hpcpack2019\HPCPack2019.zip"
+        #       $wc = New-Object net.webclient
+        #       $wc.Downloadfile($url,$location)
+        #       $installdir = "C:\install"
+        #       Set-ExecutionPolicy Bypass -Scope Process -Force;
+        #       Expand-Archive -Path $location -DestinationPath $installdir
+        #       $cerFileName = "C:\ms-hpcpack2019\myhpc.pfx"
+        #       $bucket = "${QSS3BucketName}"
+        #       Copy-S3Object -BucketName "${CertS3Bucket}" -Key "${CertS3Key}" -LocalFile $cerFileName
 
-              $HeadNode = "${HeadNodeNetBIOSName}" + "." + "${DomainDNSName}"
-              $pw = $DomainAdminPassword
-              $Admin=[adsi]("WinNT://$env:COMPUTERNAME/Administrator, user")
-              $Admin.SetPassword($pw)
+        #       $HeadNode = "${HeadNodeNetBIOSName}" + "." + "${DomainDNSName}"
+        #       $pw = $DomainAdminPassword
+        #       $Admin=[adsi]("WinNT://$env:COMPUTERNAME/Administrator, user")
+        #       $Admin.SetPassword($pw)
 
-              $setupArg = "-unattend -ComputeNode:$HeadNode -SSLPfxFilePath:$cerFileName -SSLPfxFilePassword:$pw"
+        #       $setupArg = "-unattend -ComputeNode:$HeadNode -SSLPfxFilePath:$cerFileName -SSLPfxFilePassword:$pw"
 
-              $p = Start-Process -FilePath "$installdir\setup.exe" -ArgumentList $setupArg -PassThru -Wait
-              $p
-              ## Bring node online
-              Start-Sleep -s 60  
-              Add-PSSnapIn Microsoft.HPC -ErrorAction SilentlyContinue
+        #       $p = Start-Process -FilePath "$installdir\setup.exe" -ArgumentList $setupArg -PassThru -Wait
+        #       $p
+        #       ## Bring node online
+        #       Start-Sleep -s 60  
+        #       Add-PSSnapIn Microsoft.HPC -ErrorAction SilentlyContinue
 
-              # This node will be a compute node
-              Assign-HpcNodeTemplate -NodeName $env:COMPUTERNAME -Name "NonDomain ComputeNode Template" -Confirm:$false
+        #       # This node will be a compute node
+        #       Assign-HpcNodeTemplate -NodeName $env:COMPUTERNAME -Name "NonDomain ComputeNode Template" -Confirm:$false
 
-              # Only use physical cores, and leave the OS assign the processes on the machine
-              #$cores = (Get-WmiObject Win32_Processor | Measure-Object -Property NumberOfCores -Sum | Select-Object -ExpandProperty Sum)
-              #Set-HpcNode -Name $env:COMPUTERNAME -SubscribedCores $cores -Affinity:$false
+        #       # Only use physical cores, and leave the OS assign the processes on the machine
+        #       #$cores = (Get-WmiObject Win32_Processor | Measure-Object -Property NumberOfCores -Sum | Select-Object -ExpandProperty Sum)
+        #       #Set-HpcNode -Name $env:COMPUTERNAME -SubscribedCores $cores -Affinity:$false
 
-              # Bring the node online
-              Set-HpcNodeState -Name $env:COMPUTERNAME -State online
-              #######end ###########
-              </powershell>
-              <persist>true</persist>
+        #       # Bring the node online
+        #       Set-HpcNodeState -Name $env:COMPUTERNAME -State online
+        #       #######end ###########
+        #       </powershell>
+        #       <persist>true</persist>
         BlockDeviceMappings:
           - DeviceName: /dev/sdk
             Ebs:
@@ -528,7 +539,7 @@ Resources:
   ScaleUpEventBridgeResource:
     Type: AWS::Events::Rule
     Properties:
-      State: !If [JoinDomain, 'ENABLED', 'DISABLED']
+      State: 'ENABLED'
       Description: Run configuration document that joins domain.
       EventPattern:
         source:
@@ -547,7 +558,7 @@ Resources:
               InstanceId: $.detail.EC2InstanceId
               ASGName: $.detail.AutoScalingGroupName
               LCHName: $.detail.LifecycleHookName
-            InputTemplate: !Sub '{"AutomationAssumeRole":["${ExecutionResourceRole.Arn}"],"InstanceId":[<InstanceId>],"ASGName":[<ASGName>],"LCHName":[<LCHName>],"QSS3BucketName":["${QSS3BucketName}"],"QSS3KeyPrefix":["${QSS3KeyPrefix}"],"URLSuffix":["${AWS::URLSuffix}"], "DomainNetBIOSName":["${DomainNetBIOSName}"], "DomainDNSName":["${DomainDNSName}"]}'
+            InputTemplate: !Sub '{"AutomationAssumeRole":["${ExecutionResourceRole.Arn}"],"InstanceId":[<InstanceId>],"ASGName":[<ASGName>],"LCHName":[<LCHName>],"DomainJoined":["${DomainJoined}"],"ADUserSecrets":["${ADUserSecrets}"], "QSS3BucketName":["${QSS3BucketName}"],"QSS3KeyPrefix":["${QSS3KeyPrefix}"],"URLSuffix":["${AWS::URLSuffix}"], "DomainNetBIOSName":["${DomainNetBIOSName}"], "DomainDNSName":["${DomainDNSName}"]}'
   ScaleDownEventBridgeResource:
     Type: AWS::Events::Rule
     Properties:
@@ -580,6 +591,9 @@ Resources:
         description: "Configure instances on launch."
         assumeRole: "{{AutomationAssumeRole}}"
         parameters:
+          DomainJoined:
+            description: "Domain joined"
+            type: "String"
           InstanceId:
             description: "ID of the instance."
             type: "String" 
@@ -624,6 +638,10 @@ Resources:
             default: ""
             description: "(Optional) The ARN of the role that allows automation to perform the actions on your behalf."
             type: "String" 
+          ADUserSecrets:
+            default: ""
+            description: "AD user secrets"
+            type: "String"
         mainSteps:
           - name: waitUntilInstanceStateRunning
             action: aws:waitForAwsResourceProperty
@@ -646,70 +664,40 @@ Resources:
               PropertySelector: "$.InstanceStatuses[0].InstanceState.Name"
               DesiredValues:
                 - running
-          - name: "InstallDSCmodules"
-            action: aws:runCommand
-            onFailure: "step:abandonHookAction"
+          - name: DomainJoinBranch
+            action: aws:branch
             inputs:
-              DocumentName: AWS-RunPowerShellScript
-              InstanceIds: 
+              Choices:
+              - Variable: "{{DomainJoined}}"
+                StringEquals: "True"
+                NextStep: JoinDomain
+              - Variable: "{{DomainJoined}}"
+                StringEquals: "False"
+                NextStep: HPCSetup
+          - name: "JoinDomain"
+            action: "aws:runCommand"
+            inputs:
+              DocumentName: "AWS-RunRemoteScript"
+              InstanceIds:
                 - "{{InstanceId}}"
               CloudWatchOutputConfig:
                 CloudWatchOutputEnabled: "true"
-                CloudWatchLogGroupName: !Sub "/QuickStart/hpc/${AWS::StackName}/SetupConfiguration"
+                CloudWatchLogGroupName: !Sub '/aws/Quick_Start/HPC-${AWS::StackName}'
               Parameters:
-                commands: 
-                  - |
-                     <#
-                         .SYNOPSIS
-                         install-dsc-modules.ps1
-                     
-                         .DESCRIPTION
-                         This script downloads and installs the required PowerShell modules to create and configure Active Directory Domain Controllers. 
-                         It also creates a self signed certificate to be uses with PowerShell DSC.
-                         
-                         .EXAMPLE
-                         .\install-dsc-modules
-                     #>
-                     
-                     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-                     
-                     Write-Output 'Installing NuGet Package Provider'
-                     Try {
-                         Install-PackageProvider -Name 'NuGet' -MinimumVersion '2.8.5' -Force -ErrorAction Stop
-                     } Catch [System.Exception] {
-                         Write-Output "Failed to install NuGet Package Provider $_"
-                         Exit 1
-                     }
-                     
-                     Write-Output 'Setting PSGallery Respository to trusted'
-                     Try {
-                         Set-PSRepository -Name 'PSGallery' -InstallationPolicy 'Trusted' -ErrorAction Stop
-                     } Catch [System.Exception] {
-                         Write-Output "Failed to set PSGallery Respository to trusted $_"
-                         Exit 1
-                     }
-                     
-                     Write-Output 'Installing the needed Powershell DSC modules for this Quick Start'
-                     $Modules = @(
-                         @{
-                             Name = 'ActiveDirectoryDsc'
-                             Version = '6.0.1'
-                         },
-                         @{
-                             Name = 'ComputerManagementDsc'
-                             Version = '8.4.0'
-                         }
-                     )
-                     
-                     Foreach ($Module in $Modules) {
-                         Try {
-                             Install-Module -Name $Module.Name -RequiredVersion $Module.Version -ErrorAction Stop
-                         } Catch [System.Exception] {
-                             Write-Output "Failed to Import Modules $_"
-                             Exit 1
-                         }
-                     }
-          - name: "GenerateDomainJoinMof"
+                sourceType: "S3"
+                sourceInfo:
+                  !Sub
+                    - '{"path": "https://${S3Bucket}.s3.${S3Region}.{{URLSuffix}}/{{QSS3KeyPrefix}}scripts/Join-Domain.ps1"}'
+                    - S3Bucket: !If
+                        - UsingDefaultBucket
+                        - !Sub '${QSS3BucketName}-${AWS::Region}'
+                        - !Ref QSS3BucketName
+                      S3Region: !If 
+                        - UsingDefaultBucket
+                        - !Ref AWS::Region
+                        - !Ref QSS3BucketRegion
+                commandLine: "./Join-Domain.ps1 -DomainName {{DomainDNSName}} -ADUserSecrets {{ADUserSecrets}}"
+          - name: "HPCSetup"
             action: aws:runCommand
             onFailure: "step:abandonHookAction"
             inputs:
@@ -718,79 +706,143 @@ Resources:
                 - "{{InstanceId}}"
               CloudWatchOutputConfig:
                 CloudWatchOutputEnabled: "true"
-                CloudWatchLogGroupName: !Sub "/QuickStart/hpc/${AWS::StackName}/SetupConfiguration"
+                CloudWatchLogGroupName: !Sub "/QuickStart/hpc/${AWS::StackName}/HPCSetup"
               Parameters:
                 commands: 
                   - !Sub |
-                     [CmdletBinding()]
-                     # Incoming Parameters for Script, CloudFormation\SSM Parameters being passed in
-                     param()
-                     
-                     # Creating Configuration Data Block that allows plain test password 
-                     # for DSC Configuration Processing
-                     $ConfigurationData = @{
-                         AllNodes = @(
-                             @{
-                                 NodeName="*"
-                                 PSDscAllowPlainTextPassword = $true
-                                 PSDscAllowDomainUser = $true
-                             },
-                             @{
-                                 NodeName = 'localhost'
-                             }
-                         )
-                     }
-                     
-                     Configuration DomainJoin {
-                         $ss = ConvertTo-SecureString -String 'stringdoesntmatter' -AsPlaintext -Force
-                         $Credentials = New-Object PSCredential('${ADUserSecrets}', $ss)
-                     
-                         Import-Module -Name PSDesiredStateConfiguration
-                         Import-Module -Name ComputerManagementDsc
-                         
-                         Import-DscResource -Module PSDesiredStateConfiguration
-                         Import-DscResource -Module ComputerManagementDsc
-                     
-                         Node 'localhost' {
-                     
-                             Computer JoinDomain {
-                                 Name = $env:COMPUTERNAME
-                                 DomainName = '{{DomainDNSName}}'
-                                 Credential = $Credentials
-                             }
-                         }
-                     }
-                     
-                     DomainJoin -OutputPath 'C:\AWSQuickstart\DomainJoin' -ConfigurationData $ConfigurationData
-          - name: "applyDomainJoin"
-            action: aws:runCommand
-            onFailure: step:abandonHookAction
-            inputs:
-              DocumentName: AWS-ApplyDSCMofs
-              InstanceIds: 
-                - "{{InstanceId}}"
-              CloudWatchOutputConfig:
-                CloudWatchOutputEnabled: "true"
-                CloudWatchLogGroupName: !Sub "/QuickStart/hpc/${AWS::StackName}/SetupConfiguration"
-              Parameters:
-                MofsToApply:
-                  - "C:\\AWSQuickstart\\DomainJoin\\localhost.mof"
-                ServicePath:
-                  - default
-                MofOperationMode:
-                  - Apply
-                ModuleSourceBucketName:
-                  - "NONE"
-                AllowPSGalleryModuleSource:
-                  - "True"
-                RebootBehavior:
-                  - "AfterMof"
-                UseComputerNameForReporting:
-                  - "False"
-                EnableVerboseLogging:
-                  - "False"
-                EnableDebugLogging:
-                  - "False"
+                    function ConvertTo-HexIP {
+                    <#
+                    .Synopsis
+                    Converts a dotted decimal IP address into a hexadecimal string.
+                    .Description
+                    ConvertTo-HexIP takes a dotted decimal IP and returns a single hexadecimal string value.
+                    .Parameter IPAddress
+                    An IP Address to convert.
+                    #>
+
+                    [CmdLetBinding()]
+                    param(
+                    [Parameter(Mandatory = $true, Position = 0, ValueFromPipeline = $true)]
+                    [Net.IPAddress]$IPAddress
+                    )
+
+                    process {
+                    "$($IPAddress.GetAddressBytes() | ForEach-Object { '{0:x2}' -f $_ })" -Replace 's'
+                    }
+                    }
+
+                    $instanceId = (Invoke-RestMethod -Method Get -Uri http://169.254.169.254/latest/meta-data/instance-id)
+                    $hostIP = (Invoke-RestMethod -Method Get -Uri http://169.254.169.254/latest/meta-data/local-ipv4)
+                    $hostName =  ConvertTo-HexIP($hostIP)
+                    $hostName = "ip-" + $hostName -replace('\s','')
+                    $tags = Get-EC2Tag | Where-Object {$_.ResourceId -eq $instanceId -and $_.Key -eq "MasterServerName"}
+                    $masterName = $tags.Value
+                    $retryCount = 4
+                    $retryDelay = 60
+                    $selfTestPassed = 1
+
+                    ######## Self Test 1 - Ping Headnode and HPC APP Service #########
+
+                    $test1Passed = $false
+                    $test1RetryCount = 0
+
+                    while($test1Passed -eq $false -and $test1RetryCount -lt $retryCount)
+                    {
+                    $test1Result = Test-NetConnection -ComputerName $masterName 
+
+                    if($test1Result.PingSucceeded -eq $true)
+                    {
+                    $test1Passed = $true
+                    }
+                    else
+                    {
+                    Start-Sleep -Seconds $retryDelay
+                    $test1RetryCount = $test1RetryCount + 1
+                    }
+                    }
+
+                    ####### Self Test 2 - Test Head Node Service Running #########
+                    $test2Passed = $false
+                    if($test1Passed -eq $true)
+                    {
+                    $GLService = Get-Service -Name Dhcp
+
+                    if($GLService.Status -ne 'Running')
+                    {
+
+                    Start-Service -Name Dhcp
+                    $GLService = Get-Service -Name Dhcp
+                    }
+                    if($GLService.Status -eq 'Running')
+                    {
+                    $test2Passed = $true
+                    }
+                    }
+
+                    ######### Action Based on Tests ####################
+                    New-EC2Tag -Resource $instanceId -Tag @{Key="Name"; Value="$HostName"}
+                    New-EC2Tag -Resource $instanceId -Tag @{Key="Octank_InFarm"; Value="pass"}
+
+                    if($test1Passed -eq $true -and $test2Passed -eq $true)
+                    {
+                    New-EC2Tag -Resource $instanceId -Tag @{Key="Octank_PassedTest"; Value="Pass"}
+                    }
+                    else
+                    {
+                    New-EC2Tag -Resource $instanceId -Tag @{Key="Octank_PassedTest"; Value="Fail"}
+                    Set-ASInstanceHealth -InstanceId $instanceId -HealthStatus "Unhealthy"
+                    }
+                    #####  MSHPCPACK Install #############
+                    Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+                    Write-Host "Disabling Windows Firewall"
+                    Get-NetFirewallProfile | Set-NetFirewallProfile -Enabled False
+
+                    $Admin = ConvertFrom-Json -InputObject (Get-SECSecretValue -SecretId "${ADUserSecrets}").SecretString
+                    $DomainAdminPassword = $Admin.password
+                    
+                    Write-Host "Disabling IE Enhanced Security Configuration (ESC)..."
+                    $AdminKey = "HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A7-37EF-4b3f-8CFC-4F3A74704073}"
+                    $UserKey = "HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A8-37EF-4b3f-8CFC-4F3A74704073}"
+                    Set-ItemProperty -Path $AdminKey -Name "IsInstalled" -Value 0
+                    Set-ItemProperty -Path $UserKey -Name "IsInstalled" -Value 0
+                    
+                    Write-Host "Download HPCPACK Software"
+                    Write-Host "Creating Directory for HPC PACK 2019 Public Cert"
+                    New-Item -Path C:\ms-hpcpack2019\ -ItemType directory -Force
+                    $url = "https://download.microsoft.com/download/c/e/b/ceb6122c-1006-44f8-99b1-1792f928f155/HPC%20Pack%202019.zip"
+                    $location = "C:\ms-hpcpack2019\HPCPack2019.zip"
+                    $wc = New-Object net.webclient
+                    $wc.Downloadfile($url,$location)
+                    $installdir = "C:\install"
+                    Set-ExecutionPolicy Bypass -Scope Process -Force;
+                    Expand-Archive -Path $location -DestinationPath $installdir
+                    $cerFileName = "C:\ms-hpcpack2019\myhpc.pfx"
+                    $bucket = "${QSS3BucketName}"
+                    Copy-S3Object -BucketName "${CertS3Bucket}" -Key "${CertS3Key}" -LocalFile $cerFileName
+
+                    $HeadNode = "${HeadNodeNetBIOSName}" + "." + "${DomainDNSName}"
+                    $pw = $DomainAdminPassword
+                    $Admin=[adsi]("WinNT://$env:COMPUTERNAME/Administrator, user")
+                    $Admin.SetPassword($pw)
+
+                    $setupArg = "-unattend -ComputeNode:$HeadNode -SSLPfxFilePath:$cerFileName -SSLPfxFilePassword:$pw"
+
+                    $p = Start-Process -FilePath "$installdir\setup.exe" -ArgumentList $setupArg -PassThru -Wait
+                    $p
+                    ## Bring node online
+                    Start-Sleep -s 60  
+                    Add-PSSnapIn Microsoft.HPC -ErrorAction SilentlyContinue
+
+                    # This node will be a compute node
+                    Assign-HpcNodeTemplate -NodeName $env:COMPUTERNAME -Name "NonDomain ComputeNode Template" -Confirm:$false
+
+                    # Only use physical cores, and leave the OS assign the processes on the machine
+                    #$cores = (Get-WmiObject Win32_Processor | Measure-Object -Property NumberOfCores -Sum | Select-Object -ExpandProperty Sum)
+                    #Set-HpcNode -Name $env:COMPUTERNAME -SubscribedCores $cores -Affinity:$false
+
+                    # Bring the node online
+                    Set-HpcNodeState -Name $env:COMPUTERNAME -State online
+                    #######end ###########
           - name: "completeHookAction"
             action: aws:executeAwsApi
             isEnd: true
