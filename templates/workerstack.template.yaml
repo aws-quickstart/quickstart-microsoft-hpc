@@ -581,7 +581,7 @@ Resources:
               InstanceId: $.detail.EC2InstanceId
               ASGName: $.detail.AutoScalingGroupName
               LCHName: $.detail.LifecycleHookName
-            InputTemplate: !Sub '{"AutomationAssumeRole":["${ExecutionResourceRole.Arn}"],"InstanceId":[<InstanceId>],"ASGName":[<ASGName>],"LCHName":[<LCHName>]}'
+            InputTemplate: !Sub '{"AutomationAssumeRole":["${ExecutionResourceRole.Arn}"],"InstanceId":[<InstanceId>],"ASGName":[<ASGName>],"LCHName":[<LCHName>],"DomainJoined":["${DomainJoined}"],"ADUserSecrets":["${ADUserSecrets}"], "QSS3BucketName":["${QSS3BucketName}"],"QSS3KeyPrefix":["${QSS3KeyPrefix}"],"URLSuffix":["${AWS::URLSuffix}"], "DomainNetBIOSName":["${DomainNetBIOSName}"], "DomainDNSName":["${DomainDNSName}"]}'
   SetupConfigurationDoc:
     Type: AWS::SSM::Document
     Properties:
@@ -830,11 +830,29 @@ Resources:
                     $p = Start-Process -FilePath "$installdir\setup.exe" -ArgumentList $setupArg -PassThru -Wait
                     $p
                     ## Bring node online
-                    Start-Sleep -s 60  
+                    Start-Sleep -s 120  
                     Add-PSSnapIn Microsoft.HPC -ErrorAction SilentlyContinue
+                    
+                    $Admin = ConvertFrom-Json -InputObject (Get-SECSecretValue -SecretId $ADUserSecrets).SecretString
+                    $UserName = ${DomainDNSName} + "\" + admin
+                    $pass = ConvertTo-SecureString $Admin.password -AsPlainText -Force
+                    $cred = New-Object System.Management.Automation.PSCredential -ArgumentList $UserName,$pass
 
-                    # This node will be a compute node
-                    Assign-HpcNodeTemplate -NodeName $env:COMPUTERNAME -Name "NonDomain ComputeNode Template" -Confirm:$false
+                    $joincluster = {
+                        $ErrorActionPreference = "Stop"
+                        
+                        Write-Host "Joining Cluster"
+                        if ((gwmi win32_computersystem).partofdomain -eq $true) {
+                            write-host  "Workers will join Domain Joined Node Template"
+                            # This node will be a compute node
+                        Assign-HpcNodeTemplate -NodeName $env:COMPUTERNAME -Name "Default ComputeNode Template" -Confirm:$false
+                        } else {
+                            write-host  "Workers will join Non-domain Joined Node Template"
+                            # This node will be a compute node
+                        Assign-HpcNodeTemplate -NodeName $env:COMPUTERNAME -Name "NonDomain ComputeNode Template" -Confirm:$false
+                        }
+                    }
+                    Invoke-Command -ScriptBlock $joincluster -ComputerName $env:COMPUTERNAME -Credential $cred -Authentication Credssp
 
                     # Only use physical cores, and leave the OS assign the processes on the machine
                     #$cores = (Get-WmiObject Win32_Processor | Measure-Object -Property NumberOfCores -Sum | Select-Object -ExpandProperty Sum)
@@ -874,6 +892,9 @@ Resources:
         parameters:
           InstanceId:
             description: "ID of the instance."
+            type: "String"
+          DomainJoined:
+            description: "Domain joined"
             type: "String" 
           ASGName:
             description: "Auto Scaling group name."
@@ -884,98 +905,66 @@ Resources:
           AutomationAssumeRole:
             default: ""
             description: "(Optional) The ARN of the role that allows automation to perform the actions on your behalf."
-            type: "String" 
+            type: "String"
+          URLSuffix:
+            default: "amazonaws.com"
+            description: "AWS URL suffix."
+            type: "String"
+          DomainDNSName: 
+            default: "example.com"
+            description: "Fully qualified domain name (FQDN) of the forest root domain (for example, example.com)."
+            type: "String"
+          DomainNetBIOSName:
+            default: "example"
+            description: "NetBIOS name of the domain (up to 15 characters) for users of earlier versions of Windows (for example, EXAMPLE)."
+            type: "String"
+          QSS3BucketName:
+            default: "aws-quickstart"
+            description: "Name of the S3 bucket for your copy of the Quick Start assets. 
+      Keep the default name unless you are customizing the template. 
+      Changing the name updates code references to point to a new Quick 
+      Start location. This name can include numbers, lowercase letters, 
+      uppercase letters, and hyphens, but do not start or end with a hyphen (-). 
+      See https://aws-quickstart.github.io/option1.html."
+            type: "String"
+          QSS3KeyPrefix:
+            default: "quickstart-microsoft-hpc/"
+            description: "S3 key prefix that is used to simulate a directory for your copy of the 
+      Quick Start assets. Keep the default prefix unless you are customizing 
+      the template. Changing this prefix updates code references to point to 
+      a new Quick Start location. This prefix can include numbers, lowercase 
+      letters, uppercase letters, hyphens (-), and forward slashes (/). 
+      See https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingMetadata.html 
+      and https://aws-quickstart.github.io/option1.html."
+            type: "String"
+          ADUserSecrets:
+            default: ""
+            description: "AD user secrets"
+            type: "String"
         mainSteps:
-          - name: "GenerateRemoveJoinMof"
-            action: aws:runCommand
-            onFailure: "step:abandonHookAction"
+          - name: "RemoveDomain"
+            action: "aws:runCommand"
             inputs:
-              DocumentName: AWS-RunPowerShellScript
-              InstanceIds: 
+              DocumentName: "AWS-RunRemoteScript"
+              InstanceIds:
                 - "{{InstanceId}}"
               CloudWatchOutputConfig:
                 CloudWatchOutputEnabled: "true"
-                CloudWatchLogGroupName: !Sub "/QuickStart/hpc/${AWS::StackName}/RemoveConfiguration"
+                CloudWatchLogGroupName: !Sub '/aws/Quick_Start/HPC-${AWS::StackName}'
               Parameters:
-                commands: 
-                  - !Sub |
-                      [CmdletBinding()]
-                      # Incoming Parameters for Script, CloudFormation\SSM Parameters being passed in
-                      param()
-                      
-                      $ConfigurationData = @{
-                          AllNodes = @(
-                              @{
-                                  NodeName="*"
-                                  PSDscAllowPlainTextPassword = $true
-                                  PSDscAllowDomainUser = $true
-                              },
-                              @{
-                                  NodeName = 'localhost'
-                              }
-                          )
-                      }
-                      
-                      Configuration RemoveDomain {
-                      
-                          $ss = ConvertTo-SecureString -String 'stringdoesntmatter' -AsPlaintext -Force
-                          $Credentials = New-Object PSCredential("${ADUserSecrets}", $ss)
-                          
-                      
-                          Import-Module -Name PSDesiredStateConfiguration
-                          Import-Module -Name ComputerManagementDsc
-                          Import-Module -Name ActiveDirectoryDsc
-                          
-                          Import-DscResource -Module PSDesiredStateConfiguration
-                          Import-DscResource -Module ComputerManagementDsc
-                          Import-DscResource -Module ActiveDirectoryDsc
-                      
-                      
-                          Node localhost {
-                              WindowsFeature RSAT-AD-PowerShell {
-                                  Name = 'RSAT-AD-PowerShell'
-                                  Ensure = 'Present'
-                              }
-                              
-                              ADComputer RemoveDomain {
-                                  ComputerName = $env:COMPUTERNAME
-                                  Ensure = 'Absent'
-                                  Credential = $Credentials
-                                  DependsOn = "[WindowsFeature]RSAT-AD-PowerShell"
-                              }
-                          }
-                      }
-                      
-                      RemoveDomain -OutputPath 'C:\AWSQuickstart\RemoveDomain' -ConfigurationData $ConfigurationData
-          - name: "RemoveFromDomain"
-            action: aws:runCommand
-            onFailure: step:abandonHookAction
-            inputs:
-              DocumentName: AWS-ApplyDSCMofs
-              InstanceIds: 
-                - "{{InstanceId}}"
-              CloudWatchOutputConfig:
-                CloudWatchOutputEnabled: "true"
-                CloudWatchLogGroupName: !Sub "/QuickStart/hpc/${AWS::StackName}/RemoveConfiguration"
-              Parameters:
-                MofsToApply:
-                  - "C:\\AWSQuickstart\\RemoveDomain\\localhost.mof"
-                ServicePath:
-                  - default
-                MofOperationMode:
-                  - Apply
-                ModuleSourceBucketName:
-                  - "NONE"
-                AllowPSGalleryModuleSource:
-                  - "True"
-                RebootBehavior:
-                  - "AfterMof"
-                UseComputerNameForReporting:
-                  - "False"
-                EnableVerboseLogging:
-                  - "False"
-                EnableDebugLogging:
-                  - "False"
+                sourceType: "S3"
+                sourceInfo:
+                  !Sub
+                    - '{"path": "https://${S3Bucket}.s3.${S3Region}.{{URLSuffix}}/{{QSS3KeyPrefix}}scripts/Remove-Domain.ps1"}'
+                    - S3Bucket: !If
+                        - UsingDefaultBucket
+                        - !Sub '${QSS3BucketName}-${AWS::Region}'
+                        - !Ref QSS3BucketName
+                      S3Region: !If 
+                        - UsingDefaultBucket
+                        - !Ref AWS::Region
+                        - !Ref QSS3BucketRegion
+                commandLine: "./Remove-Domain.ps1 -DomainNetBIOSName {{DomainNetBIOSName}} -ADUserSecrets {{ADUserSecrets}}"
           - name: "completeHookAction"
             action: aws:executeAwsApi
             isEnd: true
