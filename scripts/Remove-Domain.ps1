@@ -8,11 +8,12 @@ param(
 
 $ErrorActionPreference = "Stop"
 Add-PSSnapIn Microsoft.HPC -ErrorAction SilentlyContinue
-#$Admin = ConvertFrom-Json -InputObject (Get-SECSecretValue -SecretId $ADUserSecrets).SecretString
-$Admin = "VMware1!"
-$UserName = "example" + "\" + "admin"
-$pass = ConvertTo-SecureString $Admin -AsPlainText -Force
+$Admin = ConvertFrom-Json -InputObject (Get-SECSecretValue -SecretId $ADUserSecrets).SecretString
+
+$UserName = $DomainName + "\" + $Admin.username
+$pass = ConvertTo-SecureString $Admin.password -AsPlainText -Force
 $cred = New-Object System.Management.Automation.PSCredential -ArgumentList $UserName,$pass
+
 Set-HpcNodeState -Name $env:COMPUTERNAME -State "Offline" -Force
 Remove-HpcNode  -Name $env:COMPUTERNAME -Confirm:$False
 Remove-Computer  -ComputerName $env:COMPUTERNAME -UnjoinDomainCredential $cred -ErrorAction Stop -Force
